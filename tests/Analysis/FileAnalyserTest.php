@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Tests\Analysis;
 
 use Doloto\Big0nia\Analysis\FileAnalyser;
+use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
 use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
 use PhpParser\ErrorHandler;
@@ -63,6 +64,22 @@ final class FileAnalyserTest extends TestCase
         self::assertSame(31, $diagnostics[0]->line);
         self::assertSame(
             'Potential O(n × m) algorithm: every users[i] is compared against every orders[j] using getId() vs getUserId(). Estimated complexity: O(users × orders).',
+            $diagnostics[0]->message
+        );
+    }
+
+    public function testDetectsSelfReferentialArrayMergeButNotUnrelatedOrSuppressedForms(): void
+    {
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $analyser = new FileAnalyser($parser, [new ArrayMergeInLoopRule()]);
+
+        $fixture = __DIR__ . '/data/array-merge-in-loop.php';
+        $diagnostics = $analyser->analyse($fixture);
+
+        self::assertCount(1, $diagnostics);
+        self::assertSame(17, $diagnostics[0]->line);
+        self::assertSame(
+            'Potential O(n²) algorithm: array_merge() rebuilds $result from scratch on every iteration.',
             $diagnostics[0]->message
         );
     }

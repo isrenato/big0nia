@@ -1,8 +1,9 @@
 # big0nia
 
-A standalone static analyzer that detects nested loops which are secretly
-an expensive collection join, and suggests indexing the inner collection
-instead.
+A standalone static analyzer that detects algorithmic-complexity
+anti-patterns in PHP: nested loops which are secretly an expensive
+collection join, and `array_merge()` calls that silently turn a loop into
+O(n²) by rebuilding the same array on every iteration.
 
 ## The problem it finds
 
@@ -27,7 +28,38 @@ tests/data/example.php:2
   of scanning. Possible complexity after optimization: O(users + orders).
 ```
 
-## How detection works
+## array_merge() in a loop
+
+```php
+$result = [];
+foreach ($items as $item) {
+    $result = array_merge($result, [$item]);
+}
+```
+
+`array_merge()` copies its entire first argument on every call, so this is
+O(n²) — for every item, the whole (growing) `$result` array is rebuilt.
+`big0nia` reports:
+
+```
+tests/Analysis/data/array-merge-in-loop.php:17
+  Potential O(n²) algorithm: array_merge() rebuilds $result from scratch
+  on every iteration.
+  Tip: Replace array_merge($result, [...]) with $result[] = ... (or an
+  equivalent append), or build the pieces separately and merge once after
+  the loop.
+```
+
+Only the self-referential accumulation pattern is flagged — the assigned
+variable must also appear as one of `array_merge()`'s own arguments, inside
+a `foreach` or canonical `for` loop (through `if`/`elseif`/`else`, but not
+into a nested loop, which is checked independently on its own). An
+`array_merge()` call that builds an unrelated value from other variables is
+not flagged, and the finding is suppressed under the same size-based rules
+as the nested-loop-join detector when the loop provably iterates a small
+fixed collection.
+
+## How nested-loop-join detection works
 
 For every `foreach` loop, and every canonical indexed `for` loop
 (`for ($i = 0; $i < count($users); $i++) { ... $users[$i] ... }` — exactly
@@ -82,9 +114,10 @@ vendor/bin/big0nia analyse <path> [<path> ...]
 ## Status
 
 v0 ships the nested-loop-join detector for `foreach` (`NestedLoopJoinRule`)
-and canonical indexed `for` loops (`NestedForLoopJoinRule`). More
-performance-anti-pattern rules (Doctrine N+1, `array_merge()` in loops,
-repeated sorts) are planned.
+and canonical indexed `for` loops (`NestedForLoopJoinRule`), and the
+self-referential `array_merge()`-in-a-loop detector
+(`ArrayMergeInLoopRule`). More performance-anti-pattern rules (Doctrine
+N+1, repeated sorts) are planned.
 
 ## License
 

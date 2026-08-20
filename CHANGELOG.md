@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Detects the self-referential `array_merge()`-in-a-loop anti-pattern
+  (`$result = array_merge($result, [...])` inside a `foreach` or canonical
+  `for` loop) via a new `ArrayMergeInLoopRule`, only flagging the case where
+  the assigned variable also appears as one of `array_merge()`'s own
+  arguments — an unrelated `array_merge()` call building a different value
+  is not flagged. Reuses the same collection-size suppression as the
+  nested-loop-join rules when the loop provably iterates a small fixed
+  collection.
+- Renamed the `LoopJoinRule` interface to `LoopRule`, since it now has an
+  implementer (`ArrayMergeInLoopRule`) that isn't a join rule. Mechanical
+  rename only, no behavior change.
+
 ## [0.2.0] - 2026-08-20
 
 ### Added

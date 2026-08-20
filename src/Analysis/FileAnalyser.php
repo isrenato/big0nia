@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Doloto\Big0nia\Analysis;
 
-use Doloto\Big0nia\Rule\LoopJoinRule;
+use Doloto\Big0nia\Rule\LoopRule;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\ParentConnectingVisitor;
@@ -14,7 +14,7 @@ use RuntimeException;
 final class FileAnalyser
 {
     /**
-     * @param LoopJoinRule[] $rules
+     * @param LoopRule[] $rules
      */
     public function __construct(
         private readonly Parser $parser,

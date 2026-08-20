@@ -14,7 +14,7 @@ use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt;
 use PhpParser\Node\Stmt\For_;
 
-final class NestedForLoopJoinRule implements LoopJoinRule
+final class NestedForLoopJoinRule implements LoopRule
 {
     private NestedForFinder $forFinder;
     private CanonicalForLoopMatcher $forLoopMatcher;
