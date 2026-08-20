@@ -1,0 +1,28 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$autoloadCandidates = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+
+$autoloadFile = null;
+foreach ($autoloadCandidates as $candidate) {
+    if (file_exists($candidate)) {
+        $autoloadFile = $candidate;
+        break;
+    }
+}
+
+if ($autoloadFile === null) {
+    fwrite(STDERR, "Could not locate Composer's autoloader. Run `composer install`.\n");
+    exit(1);
+}
+
+require $autoloadFile;
+
+use Doloto\Big0nia\Console\AnalyseCommand;
+
+exit((new AnalyseCommand())->run(array_slice($_SERVER['argv'], 1)));
