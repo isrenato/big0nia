@@ -242,6 +242,122 @@ final class ClassMemberResolverTest extends TestCase
         self::assertNull($resolver->findPropertyDefaultArray($context, 'statuses'));
     }
 
+    public function testDoesNotTreatAssignmentInsideANestedAnonymousClassAsReassignment(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                private array $statuses = ['a', 'b', 'c'];
+
+                public function marker(): void {
+                    $x = 1;
+                }
+
+                public function make(): object {
+                    return new class {
+                        public array $statuses = [];
+                        public function reset(): void {
+                            $this->statuses = [];
+                        }
+                    };
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+        $default = $resolver->findPropertyDefaultArray($context, 'statuses');
+
+        self::assertNotNull($default);
+        self::assertCount(3, $default->items);
+    }
+
+    public function testTreatsAppendWriteToPropertyAsReassignment(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                private array $items = ['a', 'b'];
+
+                public function grow($x): void {
+                    $this->items[] = $x;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findPropertyDefaultArray($context, 'items'));
+    }
+
+    public function testTreatsCompoundAssignmentToPropertyAsReassignment(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                private array $items = ['a', 'b'];
+
+                public function marker(): void {
+                    $x = 1;
+                }
+
+                public function grow(array $more): void {
+                    $this->items += $more;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findPropertyDefaultArray($context, 'items'));
+    }
+
+    public function testTreatsReferenceAssignmentToPropertyAsReassignment(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                private array $items = ['a', 'b'];
+
+                public function marker(): void {
+                    $x = 1;
+                }
+
+                public function alias(array &$ref): void {
+                    $this->items = &$ref;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findPropertyDefaultArray($context, 'items'));
+    }
+
+    public function testDoesNotTreatAssignmentToADifferentPropertyAsReassignment(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                private array $items = ['a', 'b'];
+                private int $count = 0;
+
+                public function marker(): void {
+                    $x = 1;
+                }
+
+                public function bump(): void {
+                    $this->count += 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+        $default = $resolver->findPropertyDefaultArray($context, 'items');
+
+        self::assertNotNull($default);
+        self::assertCount(2, $default->items);
+    }
+
     public function testReturnsNullWhenContextNodeHasNoEnclosingClass(): void
     {
         $context = $this->contextNodeInside(<<<'PHP'
