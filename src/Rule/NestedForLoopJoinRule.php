@@ -4,27 +4,27 @@ declare(strict_types=1);
 
 namespace Doloto\Big0nia\Rule;
 
+use Doloto\Big0nia\Ast\CanonicalForLoopMatcher;
 use Doloto\Big0nia\Ast\CollectionSize;
 use Doloto\Big0nia\Ast\CollectionSizeClassifier;
 use Doloto\Big0nia\Ast\JoinSignatureMatcher;
-use Doloto\Big0nia\Ast\NestedForeachFinder;
+use Doloto\Big0nia\Ast\NestedForFinder;
 use Doloto\Big0nia\Complexity\ComplexityLabel;
-use PhpParser\Node;
-use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
-use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
-use PhpParser\Node\Stmt\Foreach_;
+use PhpParser\Node\Stmt\For_;
 
-final class NestedLoopJoinRule implements LoopJoinRule
+final class NestedForLoopJoinRule implements LoopJoinRule
 {
-    private NestedForeachFinder $foreachFinder;
+    private NestedForFinder $forFinder;
+    private CanonicalForLoopMatcher $forLoopMatcher;
     private JoinSignatureMatcher $joinMatcher;
     private CollectionSizeClassifier $sizeClassifier;
 
     public function __construct()
     {
-        $this->foreachFinder = new NestedForeachFinder();
+        $this->forFinder = new NestedForFinder();
+        $this->forLoopMatcher = new CanonicalForLoopMatcher();
         $this->joinMatcher = new JoinSignatureMatcher();
         $this->sizeClassifier = new CollectionSizeClassifier();
     }
@@ -34,51 +34,51 @@ final class NestedLoopJoinRule implements LoopJoinRule
      */
     public function check(Stmt $loopNode, array $precedingStmts): ?Finding
     {
-        if (!$loopNode instanceof Foreach_) {
+        if (!$loopNode instanceof For_) {
             return null;
         }
 
-        $node = $loopNode;
+        $outerBinding = $this->forLoopMatcher->match($loopNode);
+        if ($outerBinding === null) {
+            return null;
+        }
 
-        $inner = $this->foreachFinder->find($node->stmts);
+        $inner = $this->forFinder->find($loopNode->stmts);
         if ($inner === null) {
             return null;
         }
 
-        if (!$node->valueVar instanceof Variable || !is_string($node->valueVar->name)) {
-            return null;
-        }
-        if (!$inner->valueVar instanceof Variable || !is_string($inner->valueVar->name)) {
+        $innerBinding = $this->forLoopMatcher->match($inner);
+        if ($innerBinding === null) {
             return null;
         }
 
-        $outerVarName = $node->valueVar->name;
-        $innerVarName = $inner->valueVar->name;
-
-        $signature = $this->joinMatcher->find($inner->stmts, $outerVarName, $innerVarName);
+        $signature = $this->joinMatcher->findIndexed($inner->stmts, $outerBinding, $innerBinding);
         if ($signature === null) {
             return null;
         }
 
-        $outerClass = $this->sizeClassifier->classify($node->expr, $precedingStmts);
-        $innerClass = $this->sizeClassifier->classify($inner->expr, $precedingStmts);
+        $outerClass = $this->sizeClassifier->classify(new Variable($outerBinding->collectionVarName), $precedingStmts);
+        $innerClass = $this->sizeClassifier->classify(new Variable($innerBinding->collectionVarName), $precedingStmts);
 
         if ($outerClass === CollectionSize::FixedSmall || $innerClass === CollectionSize::FixedSmall) {
             return null;
         }
 
-        $outerCollectionName = $this->exprLabel($node->expr) ?? $outerVarName;
-        $innerCollectionName = $this->exprLabel($inner->expr) ?? $innerVarName;
+        $outerCollectionName = $outerBinding->collectionVarName;
+        $innerCollectionName = $innerBinding->collectionVarName;
         $sameCollection = $outerCollectionName === $innerCollectionName;
 
         $before = ComplexityLabel::forJoin($outerCollectionName, $innerCollectionName, $sameCollection);
         $after = ComplexityLabel::indexedForm($outerCollectionName, $innerCollectionName, $sameCollection);
 
         $message = sprintf(
-            'Potential %s algorithm: every %s is compared against every %s using %s vs %s. Estimated complexity: %s.',
+            'Potential %s algorithm: every %s[%s] is compared against every %s[%s] using %s vs %s. Estimated complexity: %s.',
             $sameCollection ? 'O(n²)' : 'O(n × m)',
-            $outerVarName,
-            $innerVarName,
+            $outerCollectionName,
+            $outerBinding->indexVarName,
+            $innerCollectionName,
+            $innerBinding->indexVarName,
             $signature->outerDisplay,
             $signature->innerDisplay,
             $before
@@ -91,19 +91,6 @@ final class NestedLoopJoinRule implements LoopJoinRule
             $after
         );
 
-        return new Finding($node->getLine(), $message, $tip);
-    }
-
-    private function exprLabel(Node\Expr $expr): ?string
-    {
-        if ($expr instanceof Variable && is_string($expr->name)) {
-            return $expr->name;
-        }
-
-        if ($expr instanceof PropertyFetch && $expr->name instanceof Identifier) {
-            return $this->exprLabel($expr->var) . '->' . $expr->name->toString();
-        }
-
-        return null;
+        return new Finding($loopNode->getLine(), $message, $tip);
     }
 }

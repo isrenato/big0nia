@@ -1,0 +1,127 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Doloto\Big0nia\Ast;
+
+use PhpParser\Node;
+use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\PropertyFetch;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Identifier;
+use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\Return_;
+use PhpParser\NodeFinder;
+
+final class ClassMemberResolver
+{
+    public function findPropertyDefaultArray(Node $contextNode, string $propertyName): ?Array_
+    {
+        $class = $this->findEnclosingClass($contextNode);
+        if ($class === null) {
+            return null;
+        }
+
+        $default = $this->findDeclaredPropertyDefault($class, $propertyName)
+            ?? $this->findPromotedPropertyDefault($class, $propertyName);
+
+        if ($default === null || $this->isReassignedElsewhere($class, $propertyName)) {
+            return null;
+        }
+
+        return $default;
+    }
+
+    private function findDeclaredPropertyDefault(Class_ $class, string $propertyName): ?Array_
+    {
+        $property = $class->getProperty($propertyName);
+        if ($property === null) {
+            return null;
+        }
+
+        foreach ($property->props as $prop) {
+            if ($prop->name->toString() === $propertyName && $prop->default instanceof Array_) {
+                return $prop->default;
+            }
+        }
+
+        return null;
+    }
+
+    private function findPromotedPropertyDefault(Class_ $class, string $propertyName): ?Array_
+    {
+        $constructor = $class->getMethod('__construct');
+        if ($constructor === null) {
+            return null;
+        }
+
+        foreach ($constructor->params as $param) {
+            if ($param->flags === 0 || !$param->var instanceof Variable || $param->var->name !== $propertyName) {
+                continue;
+            }
+
+            return $param->default instanceof Array_ ? $param->default : null;
+        }
+
+        return null;
+    }
+
+    private function isReassignedElsewhere(Class_ $class, string $propertyName): bool
+    {
+        foreach ((new NodeFinder())->findInstanceOf($class, Assign::class) as $assignment) {
+            if ($this->isThisPropertyFetch($assignment->var, $propertyName)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isThisPropertyFetch(Node $node, string $propertyName): bool
+    {
+        return $node instanceof PropertyFetch
+            && $node->var instanceof Variable
+            && $node->var->name === 'this'
+            && $node->name instanceof Identifier
+            && $node->name->toString() === $propertyName;
+    }
+
+    public function findMethodReturnArray(Node $contextNode, string $methodName): ?Array_
+    {
+        $class = $this->findEnclosingClass($contextNode);
+        if ($class === null) {
+            return null;
+        }
+
+        $method = $class->getMethod($methodName);
+        if ($method === null || $method->stmts === null || count($method->stmts) !== 1) {
+            return null;
+        }
+
+        $onlyStmt = $method->stmts[0];
+        if (!$onlyStmt instanceof Return_ || !$onlyStmt->expr instanceof Array_) {
+            return null;
+        }
+
+        return $onlyStmt->expr;
+    }
+
+    private function findEnclosingClass(Node $node): ?Class_
+    {
+        $current = $node;
+
+        while (true) {
+            $parent = $current->getAttribute('parent');
+            if (!$parent instanceof Node) {
+                return null;
+            }
+
+            if ($parent instanceof Class_) {
+                return $parent;
+            }
+
+            $current = $parent;
+        }
+    }
+}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Ast;
 
 use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\BinaryOp\BooleanAnd;
 use PhpParser\Node\Expr\BinaryOp\Equal;
 use PhpParser\Node\Expr\BinaryOp\Identical;
@@ -43,6 +44,67 @@ final class JoinSignatureMatcher
         }
 
         return null;
+    }
+
+    /**
+     * @param Stmt[] $stmts
+     */
+    public function findIndexed(array $stmts, ForLoopBinding $outer, ForLoopBinding $inner): ?JoinSignature
+    {
+        foreach ($stmts as $stmt) {
+            if (!$stmt instanceof If_) {
+                continue;
+            }
+
+            $cond = $this->findComparison($stmt->cond);
+            if ($cond === null) {
+                continue;
+            }
+
+            $signature = $this->matchIndexed($cond->left, $outer, $cond->right, $inner)
+                ?? $this->matchIndexed($cond->right, $outer, $cond->left, $inner);
+
+            if ($signature !== null) {
+                return $signature;
+            }
+        }
+
+        return null;
+    }
+
+    private function matchIndexed(Expr $outerSide, ForLoopBinding $outer, Expr $innerSide, ForLoopBinding $inner): ?JoinSignature
+    {
+        if (!$this->isRootedInIndexedAccess($outerSide, $outer) || !$this->isRootedInIndexedAccess($innerSide, $inner)) {
+            return null;
+        }
+
+        $outerDesc = $this->describe($outerSide);
+        $innerDesc = $this->describe($innerSide);
+
+        if ($outerDesc === null || $innerDesc === null) {
+            return null;
+        }
+
+        return new JoinSignature($outerDesc[0], $innerDesc[0], $innerDesc[1]);
+    }
+
+    private function isRootedInIndexedAccess(Expr $expr, ForLoopBinding $binding): bool
+    {
+        if (
+            $expr instanceof ArrayDimFetch
+            && $expr->var instanceof Variable
+            && $expr->var->name === $binding->collectionVarName
+            && $expr->dim instanceof Variable
+            && $expr->dim->name === $binding->indexVarName
+        ) {
+            return true;
+        }
+
+        if ($expr instanceof MethodCall || $expr instanceof PropertyFetch) {
+            return $this->isRootedInIndexedAccess($expr->var, $binding);
+        }
+
+        return false;
     }
 
     private function findComparison(Expr $expr): Equal|Identical|NotEqual|NotIdentical|null
