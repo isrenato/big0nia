@@ -25,31 +25,28 @@ final class JoinSignatureMatcher
      */
     public function find(array $stmts, string $outerVarName, string $innerVarName): ?JoinSignature
     {
-        foreach ($stmts as $stmt) {
-            if (!$stmt instanceof If_) {
-                continue;
-            }
-
-            $cond = $this->findComparison($stmt->cond);
-            if ($cond === null) {
-                continue;
-            }
-
-            $signature = $this->match($cond->left, $outerVarName, $cond->right, $innerVarName)
-                ?? $this->match($cond->right, $outerVarName, $cond->left, $innerVarName);
-
-            if ($signature !== null) {
-                return $signature;
-            }
-        }
-
-        return null;
+        return $this->findWithMatcher(
+            $stmts,
+            fn (Expr $outerSide, Expr $innerSide): ?JoinSignature => $this->match($outerSide, $outerVarName, $innerSide, $innerVarName)
+        );
     }
 
     /**
      * @param Stmt[] $stmts
      */
     public function findIndexed(array $stmts, ForLoopBinding $outer, ForLoopBinding $inner): ?JoinSignature
+    {
+        return $this->findWithMatcher(
+            $stmts,
+            fn (Expr $outerSide, Expr $innerSide): ?JoinSignature => $this->matchIndexed($outerSide, $outer, $innerSide, $inner)
+        );
+    }
+
+    /**
+     * @param Stmt[] $stmts
+     * @param callable(Expr, Expr): ?JoinSignature $matcher
+     */
+    private function findWithMatcher(array $stmts, callable $matcher): ?JoinSignature
     {
         foreach ($stmts as $stmt) {
             if (!$stmt instanceof If_) {
@@ -61,8 +58,7 @@ final class JoinSignatureMatcher
                 continue;
             }
 
-            $signature = $this->matchIndexed($cond->left, $outer, $cond->right, $inner)
-                ?? $this->matchIndexed($cond->right, $outer, $cond->left, $inner);
+            $signature = $matcher($cond->left, $cond->right) ?? $matcher($cond->right, $cond->left);
 
             if ($signature !== null) {
                 return $signature;
