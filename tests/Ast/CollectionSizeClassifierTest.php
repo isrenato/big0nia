@@ -7,12 +7,18 @@ namespace Doloto\Big0nia\Tests\Ast;
 use Doloto\Big0nia\Ast\CollectionSize;
 use Doloto\Big0nia\Ast\CollectionSizeClassifier;
 use PhpParser\Node\ArrayItem;
+use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\Expression;
+use PhpParser\Node\Stmt\Foreach_;
+use PhpParser\NodeFinder;
+use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitor\ParentConnectingVisitor;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\TestCase;
 
 final class CollectionSizeClassifierTest extends TestCase
@@ -98,5 +104,101 @@ final class CollectionSizeClassifierTest extends TestCase
         ];
 
         self::assertSame(CollectionSize::Unknown, $classifier->classify(new Variable('orders'), $stmts));
+    }
+
+    public function testClassifiesThisPropertyFetchViaItsDefaultArrayLiteral(): void
+    {
+        $expr = $this->parseAndFindLastExpr(<<<'PHP'
+            <?php
+            class Foo {
+                private array $statuses = ['a', 'b', 'c'];
+
+                public function m(): void {
+                    foreach ($this->statuses as $status) {
+                    }
+                }
+            }
+            PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify($expr, []));
+    }
+
+    public function testClassifiesThisMethodCallViaItsSingleReturnArrayLiteral(): void
+    {
+        $expr = $this->parseAndFindLastExpr(<<<'PHP'
+            <?php
+            class Foo {
+                private function statuses(): array {
+                    return ['a', 'b', 'c'];
+                }
+
+                public function m(): void {
+                    foreach ($this->statuses() as $status) {
+                    }
+                }
+            }
+            PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify($expr, []));
+    }
+
+    public function testReturnsUnknownForThisPropertyFetchWithNoResolvableDefault(): void
+    {
+        $expr = $this->parseAndFindLastExpr(<<<'PHP'
+            <?php
+            class Foo {
+                private array $orders;
+
+                public function m(): void {
+                    foreach ($this->orders as $order) {
+                    }
+                }
+            }
+            PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::Unknown, $classifier->classify($expr, []));
+    }
+
+    public function testReturnsUnknownForThisMethodCallWithNoResolvableSingleReturnLiteral(): void
+    {
+        $expr = $this->parseAndFindLastExpr(<<<'PHP'
+            <?php
+            class Foo {
+                private function orders(): array {
+                    return $this->repo->findAll();
+                }
+
+                public function m(): void {
+                    foreach ($this->orders() as $order) {
+                    }
+                }
+            }
+            PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::Unknown, $classifier->classify($expr, []));
+    }
+
+    private function parseAndFindLastExpr(string $code): Expr
+    {
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $ast = $parser->parse($code);
+        self::assertNotNull($ast);
+
+        $traverser = new NodeTraverser();
+        $traverser->addVisitor(new ParentConnectingVisitor());
+        $traverser->traverse($ast);
+
+        $foreach = (new NodeFinder())->findFirstInstanceOf($ast, Foreach_::class);
+        self::assertInstanceOf(Foreach_::class, $foreach);
+
+        return $foreach->expr;
     }
 }

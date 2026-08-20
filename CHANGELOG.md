@@ -1,0 +1,61 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- `CollectionSizeClassifier` now resolves `$this->property` (via the
+  property's declared or constructor-promoted default array literal) and
+  `$this->method()` (via a method body that is exactly one
+  `return <array literal>;`) through a new `ClassMemberResolver` helper,
+  reducing false positives on collections whose fixed size is declared on
+  the class rather than as a local literal. A property's default is only
+  trusted if the property is never reassigned anywhere else in the class.
+- Detects the nested-loop-join anti-pattern in canonical indexed `for` loops
+  (`for ($i = 0; $i < count($users); $i++) { ... $users[$i] ... }`), not just
+  `foreach`, via a new `NestedForLoopJoinRule` sharing the same size
+  classification and complexity-labeling as the `foreach` rule. Only the
+  exact canonical form is recognized (init to 0, strict `<` against a bare
+  `count($var)`, `++`/pre-increment by 1) and only `for`-in-`for` nesting is
+  detected — anything else, including mixed `foreach`/`for` nesting, falls
+  through unreported, same narrow-but-honest discipline as the rest of the
+  tool.
+- `FileAnalyser` now takes a list of rules (`LoopJoinRule[]`) instead of a
+  single hardcoded rule, and collects both `foreach` and canonical `for`
+  loop nodes, so additional loop-shape rules can be added without changing
+  its constructor again.
+
+### Fixed
+
+- Suppressed the `SplObjectStorage::attach()` deprecation notice raised by
+  `nikic/php-parser` internals on PHP 8.5+, scoped narrowly to the parser's
+  `parse()` call only (safe because this tool never executes analysed code,
+  so any deprecation surfacing during a run can only be parser-internal
+  noise, never something about the target codebase).
+
+## [0.1.0] - 2026-08-20
+
+### Added
+
+- Initial release: a standalone static-analysis CLI (`bin/big0nia analyse
+  <path>`) that detects nested `foreach` loops secretly performing an
+  O(n×m) or O(n²) join, and suggests indexing the inner collection instead.
+- AST helpers (`NestedForeachFinder`, `JoinSignatureMatcher`,
+  `CollectionSizeClassifier`) built on `nikic/php-parser`, with no
+  PHPStan dependency.
+- `CollectionSize` enum-backed size classification (`FixedSmall` /
+  `Unbounded` / `Unknown`), suppressing findings only on collections
+  provably small via a local array literal.
+- `JoinSignatureMatcher` detects a join comparison combined with `&&`
+  (e.g. `if ($user->getId() === $order->getUserId() && $order->isPaid())`),
+  descending into `BooleanAnd` at any depth to find the comparison operand.
+- `NestedLoopJoinRule`, `FileAnalyser`, and `AnalyseCommand`, with
+  per-file error isolation (a single unparseable or missing file no
+  longer aborts the whole run) and clear exit-code semantics.
+- Full test suite, CI workflow (PHPUnit, PHPStan at level 8, PHP-CS-Fixer).
+- `composer.json` `authors` and `version` metadata.

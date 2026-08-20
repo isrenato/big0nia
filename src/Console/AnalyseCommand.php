@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Console;
 
 use Doloto\Big0nia\Analysis\FileAnalyser;
+use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
 use FilesystemIterator;
 use PhpParser\Error as PhpParserError;
@@ -31,7 +32,7 @@ final class AnalyseCommand
         $files = $this->collectPhpFiles($paths, $hasMissingPath);
 
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $analyser = new FileAnalyser($parser, new NestedLoopJoinRule());
+        $analyser = new FileAnalyser($parser, [new NestedLoopJoinRule(), new NestedForLoopJoinRule()]);
 
         $diagnosticCount = 0;
         $hasSkippedFile = false;

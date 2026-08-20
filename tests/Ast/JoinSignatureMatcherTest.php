@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Doloto\Big0nia\Tests\Ast;
 
+use Doloto\Big0nia\Ast\ForLoopBinding;
 use Doloto\Big0nia\Ast\JoinSignatureMatcher;
+use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\BinaryOp\BooleanAnd;
 use PhpParser\Node\Expr\BinaryOp\Identical;
 use PhpParser\Node\Expr\MethodCall;
@@ -150,5 +152,96 @@ final class JoinSignatureMatcherTest extends TestCase
         $matcher = new JoinSignatureMatcher();
 
         self::assertNull($matcher->find($stmts, 'user', 'order'));
+    }
+
+    public function testFindsIndexedComparisonInEitherOperandOrder(): void
+    {
+        $outer = new ForLoopBinding('users', 'i');
+        $inner = new ForLoopBinding('orders', 'j');
+
+        $cond = new Identical(
+            new MethodCall(new ArrayDimFetch(new Variable('users'), new Variable('i')), 'getId'),
+            new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+        );
+        $stmts = [new If_($cond, ['stmts' => []])];
+
+        $matcher = new JoinSignatureMatcher();
+        $signature = $matcher->findIndexed($stmts, $outer, $inner);
+
+        self::assertNotNull($signature);
+        self::assertSame('getId()', $signature->outerDisplay);
+        self::assertSame('getUserId()', $signature->innerDisplay);
+        self::assertSame('userId', $signature->innerKey);
+    }
+
+    public function testFindsIndexedComparisonCombinedWithBooleanAnd(): void
+    {
+        $outer = new ForLoopBinding('users', 'i');
+        $inner = new ForLoopBinding('orders', 'j');
+
+        $comparison = new Identical(
+            new MethodCall(new ArrayDimFetch(new Variable('users'), new Variable('i')), 'getId'),
+            new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+        );
+        $cond = new BooleanAnd(
+            $comparison,
+            new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'isPaid')
+        );
+        $stmts = [new If_($cond, ['stmts' => []])];
+
+        $matcher = new JoinSignatureMatcher();
+        $signature = $matcher->findIndexed($stmts, $outer, $inner);
+
+        self::assertNotNull($signature);
+        self::assertSame('getId()', $signature->outerDisplay);
+        self::assertSame('getUserId()', $signature->innerDisplay);
+    }
+
+    public function testReturnsNullWhenIndexedComparisonUsesADifferentCollectionOrIndex(): void
+    {
+        $outer = new ForLoopBinding('users', 'i');
+        $inner = new ForLoopBinding('orders', 'j');
+
+        $cond = new Identical(
+            new MethodCall(new ArrayDimFetch(new Variable('users'), new Variable('i')), 'getId'),
+            new MethodCall(new ArrayDimFetch(new Variable('otherOrders'), new Variable('j')), 'getUserId')
+        );
+        $stmts = [new If_($cond, ['stmts' => []])];
+
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertNull($matcher->findIndexed($stmts, $outer, $inner));
+    }
+
+    public function testReturnsNullWhenIndexedComparisonUsesTheWrongIndexVariable(): void
+    {
+        $outer = new ForLoopBinding('users', 'i');
+        $inner = new ForLoopBinding('orders', 'j');
+
+        $cond = new Identical(
+            new MethodCall(new ArrayDimFetch(new Variable('users'), new Variable('k')), 'getId'),
+            new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+        );
+        $stmts = [new If_($cond, ['stmts' => []])];
+
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertNull($matcher->findIndexed($stmts, $outer, $inner));
+    }
+
+    public function testReturnsNullWhenIndexedComparisonUsesAPlainVariableInsteadOfArrayAccess(): void
+    {
+        $outer = new ForLoopBinding('users', 'i');
+        $inner = new ForLoopBinding('orders', 'j');
+
+        $cond = new Identical(
+            new MethodCall(new Variable('user'), 'getId'),
+            new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+        );
+        $stmts = [new If_($cond, ['stmts' => []])];
+
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertNull($matcher->findIndexed($stmts, $outer, $inner));
     }
 }

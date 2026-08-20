@@ -10,6 +10,7 @@ use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\BinaryOp\Identical;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Stmt\For_;
 use PhpParser\Node\Stmt\Foreach_;
 use PhpParser\Node\Stmt\If_;
 use PHPUnit\Framework\TestCase;
@@ -85,6 +86,13 @@ final class NestedLoopJoinRuleTest extends TestCase
         $outer = new Foreach_(new Variable('users'), new Variable('user'), ['stmts' => [$inner]]);
 
         self::assertNull($rule->check($outer, []));
+    }
+
+    public function testReturnsNullWhenGivenANonForeachLoopNode(): void
+    {
+        $rule = new NestedLoopJoinRule();
+
+        self::assertNull($rule->check(new For_(), []));
     }
 
     private function buildJoinFixture(
