@@ -2,8 +2,9 @@
 
 A standalone static analyzer that detects algorithmic-complexity
 anti-patterns in PHP: nested loops which are secretly an expensive
-collection join, and `array_merge()` calls that silently turn a loop into
-O(n²) by rebuilding the same array on every iteration.
+collection join, `array_merge()` calls that silently turn a loop into
+O(n²) by rebuilding the same array on every iteration, and sorts that
+redundantly re-sort data nothing in the loop ever changes.
 
 ## The problem it finds
 
@@ -58,6 +59,36 @@ into a nested loop, which is checked independently on its own). An
 not flagged, and the finding is suppressed under the same size-based rules
 as the nested-loop-join detector when the loop provably iterates a small
 fixed collection.
+
+## Repeated sorts in a loop
+
+```php
+foreach ($items as $item) {
+    usort($data, $cmp);
+    // ... use $data ...
+}
+```
+
+If `$data` is never modified inside the loop, sorting it again on every
+iteration is pure waste — it's already sorted after the first call.
+`big0nia` reports:
+
+```
+tests/Analysis/data/repeated-sort-in-loop.php:16
+  Potential wasted work: usort($data, ...) re-sorts $data on every
+  iteration, but $data is never modified inside this loop.
+  Tip: Move usort($data, ...) above the loop — sorting an already-sorted,
+  unchanged array repeatedly wastes work per iteration for no benefit.
+```
+
+Only `usort()`, `uasort()`, and `uksort()` (the custom-comparator sorts)
+are checked, inside a `foreach` or canonical `for` loop (through
+`if`/`elseif`/`else`, but not into a nested loop, which is checked
+independently on its own). If the sorted variable *is* reassigned anywhere
+in the loop — including inside a nested loop — the sort is legitimate and
+not flagged, and the finding is suppressed under the same size-based rules
+as the other two detectors when the loop provably iterates a small fixed
+collection.
 
 ## How nested-loop-join detection works
 
@@ -114,10 +145,11 @@ vendor/bin/big0nia analyse <path> [<path> ...]
 ## Status
 
 v0 ships the nested-loop-join detector for `foreach` (`NestedLoopJoinRule`)
-and canonical indexed `for` loops (`NestedForLoopJoinRule`), and the
+and canonical indexed `for` loops (`NestedForLoopJoinRule`), the
 self-referential `array_merge()`-in-a-loop detector
-(`ArrayMergeInLoopRule`). More performance-anti-pattern rules (Doctrine
-N+1, repeated sorts) are planned.
+(`ArrayMergeInLoopRule`), and the loop-invariant repeated-sort detector
+(`RepeatedSortInLoopRule`). More performance-anti-pattern rules (Doctrine
+N+1) are planned.
 
 ## License
 
