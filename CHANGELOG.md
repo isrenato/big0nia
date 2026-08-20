@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Detects loop-invariant repeated sorting (`usort($data, ...)`,
+  `uasort($data, ...)`, `uksort($data, ...)` inside a `foreach` or
+  canonical `for` loop where `$data` is never modified anywhere in the
+  loop, including inside a nested loop) via a new `RepeatedSortInLoopRule`.
+  A sort whose target variable does change per iteration is legitimate and
+  not flagged, and the finding is suppressed under the same size-based
+  rules as the other detectors when the loop provably iterates a small
+  fixed collection.
+
 ## [0.3.0] - 2026-08-20
 
 ### Added

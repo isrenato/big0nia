@@ -8,6 +8,7 @@ use Doloto\Big0nia\Analysis\FileAnalyser;
 use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
 use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
+use Doloto\Big0nia\Rule\RepeatedSortInLoopRule;
 use PhpParser\ErrorHandler;
 use PhpParser\Parser;
 use PhpParser\ParserFactory;
@@ -80,6 +81,22 @@ final class FileAnalyserTest extends TestCase
         self::assertSame(17, $diagnostics[0]->line);
         self::assertSame(
             'Potential O(n²) algorithm: array_merge() rebuilds $result from scratch on every iteration.',
+            $diagnostics[0]->message
+        );
+    }
+
+    public function testDetectsLoopInvariantSortButNotVariantOrSuppressedForms(): void
+    {
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $analyser = new FileAnalyser($parser, [new RepeatedSortInLoopRule()]);
+
+        $fixture = __DIR__ . '/data/repeated-sort-in-loop.php';
+        $diagnostics = $analyser->analyse($fixture);
+
+        self::assertCount(1, $diagnostics);
+        self::assertSame(16, $diagnostics[0]->line);
+        self::assertSame(
+            'Potential wasted work: usort($data, ...) re-sorts $data on every iteration, but $data is never modified inside this loop.',
             $diagnostics[0]->message
         );
     }

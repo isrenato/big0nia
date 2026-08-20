@@ -8,6 +8,7 @@ use Doloto\Big0nia\Analysis\FileAnalyser;
 use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
 use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
+use Doloto\Big0nia\Rule\RepeatedSortInLoopRule;
 use FilesystemIterator;
 use PhpParser\Error as PhpParserError;
 use PhpParser\ParserFactory;
@@ -37,6 +38,7 @@ final class AnalyseCommand
             new NestedLoopJoinRule(),
             new NestedForLoopJoinRule(),
             new ArrayMergeInLoopRule(),
+            new RepeatedSortInLoopRule(),
         ]);
 
         $diagnosticCount = 0;
