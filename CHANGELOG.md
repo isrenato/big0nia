@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-08-20
 
 ### Added
 
@@ -15,7 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `return <array literal>;`) through a new `ClassMemberResolver` helper,
   reducing false positives on collections whose fixed size is declared on
   the class rather than as a local literal. A property's default is only
-  trusted if the property is never reassigned anywhere else in the class.
+  trusted if it is never reassigned anywhere else in the class — including
+  through append writes (`$this->prop[] = ...`), compound assignment
+  (`$this->prop += ...`), and reference assignment (`$this->prop = &...`),
+  while assignments inside a nested anonymous class are correctly not
+  attributed to the outer class's property of the same name.
 - Detects the nested-loop-join anti-pattern in canonical indexed `for` loops
   (`for ($i = 0; $i < count($users); $i++) { ... $users[$i] ... }`), not just
   `foreach`, via a new `NestedForLoopJoinRule` sharing the same size
