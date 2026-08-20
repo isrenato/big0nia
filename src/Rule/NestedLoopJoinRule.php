@@ -16,7 +16,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt;
 use PhpParser\Node\Stmt\Foreach_;
 
-final class NestedLoopJoinRule implements LoopJoinRule
+final class NestedLoopJoinRule implements LoopRule
 {
     private NestedForeachFinder $foreachFinder;
     private JoinSignatureMatcher $joinMatcher;
