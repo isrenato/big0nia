@@ -2,7 +2,14 @@
     "name": "doloto/big0nia",
     "description": "A standalone static analyzer that detects algorithmic-complexity and performance anti-patterns in PHP/Symfony code.",
     "type": "library",
+    "version": "0.1.0",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Khalimov Renato",
+            "email": "bredevil@gmail.com"
+        }
+    ],
     "bin": [
         "bin/big0nia"
     ],
