@@ -397,7 +397,7 @@ final class ClassMemberResolverTest extends TestCase
             <?php
             namespace App;
             class Foo {
-                public function __construct(private \App\Repository\OrderRepository $orderRepo) {
+                public function __construct(int $count, private \App\Repository\OrderRepository $orderRepo) {
                     $x = 1;
                 }
             }
