@@ -36,6 +36,18 @@ final class AnalyseCommand
 
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
         $fileParser = new PhpFileParser($parser);
+
+        $parsedFiles = [];
+        $hasSkippedFile = false;
+        foreach ($files as $file) {
+            try {
+                $parsedFiles[] = $fileParser->parse($file);
+            } catch (PhpParserError | RuntimeException $e) {
+                fwrite(STDERR, sprintf("Skipping %s: %s\n", $file, $e->getMessage()));
+                $hasSkippedFile = true;
+            }
+        }
+
         $analyser = new FileAnalyser([
             new NestedLoopJoinRule(),
             new NestedForLoopJoinRule(),
@@ -44,19 +56,8 @@ final class AnalyseCommand
         ]);
 
         $diagnosticCount = 0;
-        $hasSkippedFile = false;
-        foreach ($files as $file) {
-            try {
-                $parsed = $fileParser->parse($file);
-                $diagnostics = $analyser->analyse($parsed);
-            } catch (PhpParserError | RuntimeException $e) {
-                fwrite(STDERR, sprintf("Skipping %s: %s\n", $file, $e->getMessage()));
-                $hasSkippedFile = true;
-
-                continue;
-            }
-
-            foreach ($diagnostics as $diagnostic) {
+        foreach ($parsedFiles as $parsedFile) {
+            foreach ($analyser->analyse($parsedFile) as $diagnostic) {
                 $diagnosticCount++;
                 echo sprintf("%s:%d\n", $diagnostic->file, $diagnostic->line);
                 echo sprintf("  %s\n", $diagnostic->message);
