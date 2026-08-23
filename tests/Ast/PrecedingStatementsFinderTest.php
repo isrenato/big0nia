@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Tests\Ast;
 
 use Doloto\Big0nia\Ast\PrecedingStatementsFinder;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Stmt\Foreach_;
+use PhpParser\Node\Stmt\Function_;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\ParentConnectingVisitor;
 use PhpParser\ParserFactory;
@@ -46,6 +49,21 @@ final class PrecedingStatementsFinderTest extends TestCase
         $finder = new PrecedingStatementsFinder();
 
         self::assertSame([], $finder->find($ast[0]));
+    }
+
+    public function testReturnsEmptyArrayWhenNodeNotFoundInParentSubnodes(): void
+    {
+        // Create a foreach node not actually contained in the parent's subnodes
+        $foreach = new Foreach_(new Variable('items'), new Variable('item'), []);
+        $function = new Function_('test', ['stmts' => []]);
+
+        // Manually set parent, but don't add foreach to function's stmts
+        $foreach->setAttribute('parent', $function);
+
+        $finder = new PrecedingStatementsFinder();
+
+        // Should return empty array because foreach is not actually in function's stmts
+        self::assertSame([], $finder->find($foreach));
     }
 
     /**

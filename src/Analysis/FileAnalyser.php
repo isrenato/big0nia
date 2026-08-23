@@ -6,7 +6,6 @@ namespace Doloto\Big0nia\Analysis;
 
 use Doloto\Big0nia\Ast\PrecedingStatementsFinder;
 use Doloto\Big0nia\Rule\LoopRule;
-use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\ParentConnectingVisitor;
 use PhpParser\Parser;
