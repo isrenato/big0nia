@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Console;
 
 use Doloto\Big0nia\Analysis\FileAnalyser;
+use Doloto\Big0nia\Analysis\PhpFileParser;
 use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
 use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
@@ -34,7 +35,8 @@ final class AnalyseCommand
         $files = $this->collectPhpFiles($paths, $hasMissingPath);
 
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $analyser = new FileAnalyser($parser, [
+        $fileParser = new PhpFileParser($parser);
+        $analyser = new FileAnalyser([
             new NestedLoopJoinRule(),
             new NestedForLoopJoinRule(),
             new ArrayMergeInLoopRule(),
@@ -45,7 +47,8 @@ final class AnalyseCommand
         $hasSkippedFile = false;
         foreach ($files as $file) {
             try {
-                $diagnostics = $analyser->analyse($file);
+                $parsed = $fileParser->parse($file);
+                $diagnostics = $analyser->analyse($parsed);
             } catch (PhpParserError | RuntimeException $e) {
                 fwrite(STDERR, sprintf("Skipping %s: %s\n", $file, $e->getMessage()));
                 $hasSkippedFile = true;
