@@ -107,4 +107,45 @@ final class PhpFileParserTest extends TestCase
             error_reporting($levelBeforeTest);
         }
     }
+
+    public function testReturnsEmptyAstWhenParserReturnsNull(): void
+    {
+        $parser = new class () implements Parser {
+            public function parse(string $code, ?ErrorHandler $errorHandler = null): ?array
+            {
+                return null;
+            }
+
+            public function getTokens(): array
+            {
+                return [];
+            }
+        };
+
+        $fileParser = new PhpFileParser($parser);
+        $parsed = $fileParser->parseCode('/virtual/Null.php', '<?php');
+
+        self::assertSame('/virtual/Null.php', $parsed->filePath);
+        self::assertSame([], $parsed->ast);
+    }
+
+    public function testThrowsRuntimeExceptionWhenFileCannotBeReadBetweenChecks(): void
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'phpparser_test_');
+        file_put_contents($tempFile, '<?php');
+
+        try {
+            $parser = (new ParserFactory())->createForNewestSupportedVersion();
+            $fileParser = new PhpFileParser($parser);
+
+            unlink($tempFile);
+
+            $this->expectException(RuntimeException::class);
+            $fileParser->parse($tempFile);
+        } finally {
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+            }
+        }
+    }
 }
