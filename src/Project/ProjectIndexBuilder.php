@@ -40,11 +40,9 @@ final class ProjectIndexBuilder
             /** @var Function_[] $functions */
             $functions = $finder->findInstanceOf($file->ast, Function_::class);
             foreach ($functions as $function) {
-                if ($function->namespacedName === null) {
-                    continue;
-                }
-
-                $functionsByFqcn[$function->namespacedName->toString()] = new FunctionIndexEntry($function, $file->filePath);
+                /** @var \PhpParser\Node\Name $namespacedName */
+                $namespacedName = $function->namespacedName;
+                $functionsByFqcn[$namespacedName->toString()] = new FunctionIndexEntry($function, $file->filePath);
             }
         }
 
