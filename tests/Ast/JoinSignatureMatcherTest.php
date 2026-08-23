@@ -244,4 +244,100 @@ final class JoinSignatureMatcherTest extends TestCase
 
         self::assertNull($matcher->findIndexed($stmts, $outer, $inner));
     }
+
+    public function testFindsSignatureBetweenAPlainVariableAndAnIndexedAccess(): void
+    {
+        $binding = new ForLoopBinding('orders', 'j');
+        $stmts = [
+            new If_(new Identical(
+                new MethodCall(new Variable('user'), 'getId'),
+                new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+            ), ['stmts' => []]),
+        ];
+
+        $matcher = new JoinSignatureMatcher();
+        $signature = $matcher->findVariableAgainstIndexed($stmts, 'user', $binding);
+
+        self::assertNotNull($signature);
+        self::assertSame('getId()', $signature->outerDisplay);
+        self::assertSame('getUserId()', $signature->innerDisplay);
+        self::assertSame('userId', $signature->innerKey);
+    }
+
+    public function testReturnsNullWhenIndexedSideDoesNotMatchTheBinding(): void
+    {
+        $binding = new ForLoopBinding('orders', 'j');
+        $stmts = [
+            new If_(new Identical(
+                new MethodCall(new Variable('user'), 'getId'),
+                new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('k')), 'getUserId')
+            ), ['stmts' => []]),
+        ];
+
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertNull($matcher->findVariableAgainstIndexed($stmts, 'user', $binding));
+    }
+
+    public function testIsRootedInVarIsPubliclyCallable(): void
+    {
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertTrue($matcher->isRootedInVar(new MethodCall(new Variable('user'), 'getId'), 'user'));
+        self::assertFalse($matcher->isRootedInVar(new Variable('order'), 'user'));
+    }
+
+    public function testIsRootedInIndexedAccessIsPubliclyCallable(): void
+    {
+        $binding = new ForLoopBinding('orders', 'j');
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertTrue($matcher->isRootedInIndexedAccess(new ArrayDimFetch(new Variable('orders'), new Variable('j')), $binding));
+        self::assertFalse($matcher->isRootedInIndexedAccess(new Variable('orders'), $binding));
+    }
+
+    public function testReturnsNullWhenOuterSideNotRootedInTheVariable(): void
+    {
+        $binding = new ForLoopBinding('orders', 'j');
+        $stmts = [
+            new If_(new Identical(
+                new MethodCall(new Variable('other'), 'getId'),
+                new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+            ), ['stmts' => []]),
+        ];
+
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertNull($matcher->findVariableAgainstIndexed($stmts, 'user', $binding));
+    }
+
+    public function testReturnsNullWhenOuterSideIsNotDescribable(): void
+    {
+        $binding = new ForLoopBinding('orders', 'j');
+        $stmts = [
+            new If_(new Identical(
+                new Variable('user'),
+                new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+            ), ['stmts' => []]),
+        ];
+
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertNull($matcher->findVariableAgainstIndexed($stmts, 'user', $binding));
+    }
+
+    public function testReturnsNullWhenInnerSideIsNotDescribable(): void
+    {
+        $binding = new ForLoopBinding('orders', 'j');
+        $stmts = [
+            new If_(new Identical(
+                new MethodCall(new Variable('user'), 'getId'),
+                new ArrayDimFetch(new Variable('orders'), new Variable('j'))
+            ), ['stmts' => []]),
+        ];
+
+        $matcher = new JoinSignatureMatcher();
+
+        self::assertNull($matcher->findVariableAgainstIndexed($stmts, 'user', $binding));
+    }
 }
