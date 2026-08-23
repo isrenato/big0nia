@@ -129,23 +129,41 @@ final class PhpFileParserTest extends TestCase
         self::assertSame([], $parsed->ast);
     }
 
-    public function testThrowsRuntimeExceptionWhenFileCannotBeReadBetweenChecks(): void
+    public function testThrowsRuntimeExceptionWhenFileGetContentsFailsDespiteBeingReadable(): void
     {
-        $tempFile = tempnam(sys_get_temp_dir(), 'phpparser_test_');
-        file_put_contents($tempFile, '<?php');
+        stream_wrapper_register('testunreadable', UnreadableStreamWrapperStub::class);
 
         try {
             $parser = (new ParserFactory())->createForNewestSupportedVersion();
             $fileParser = new PhpFileParser($parser);
 
-            unlink($tempFile);
-
             $this->expectException(RuntimeException::class);
-            $fileParser->parse($tempFile);
+            @$fileParser->parse('testunreadable://fake/path');
         } finally {
-            if (file_exists($tempFile)) {
-                unlink($tempFile);
-            }
+            stream_wrapper_unregister('testunreadable');
         }
+    }
+}
+
+final class UnreadableStreamWrapperStub
+{
+    public $context;
+
+    public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
+    {
+        return false;
+    }
+
+    /**
+     * @return array<int|string, int>
+     */
+    public function url_stat(string $path, int $flags): array
+    {
+        return [
+            'dev' => 0, 'ino' => 0, 'mode' => 0100644, 'nlink' => 1,
+            'uid' => 0, 'gid' => 0, 'rdev' => 0, 'size' => 0,
+            'atime' => 0, 'mtime' => 0, 'ctime' => 0,
+            'blksize' => -1, 'blocks' => -1,
+        ];
     }
 }
