@@ -6,7 +6,9 @@ namespace Doloto\Big0nia\Console;
 
 use Doloto\Big0nia\Analysis\FileAnalyser;
 use Doloto\Big0nia\Analysis\PhpFileParser;
+use Doloto\Big0nia\Project\ProjectIndexBuilder;
 use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
+use Doloto\Big0nia\Rule\InterproceduralLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
 use Doloto\Big0nia\Rule\RepeatedSortInLoopRule;
@@ -48,11 +50,14 @@ final class AnalyseCommand
             }
         }
 
+        $projectIndex = (new ProjectIndexBuilder())->build($parsedFiles);
+
         $analyser = new FileAnalyser([
             new NestedLoopJoinRule(),
             new NestedForLoopJoinRule(),
             new ArrayMergeInLoopRule(),
             new RepeatedSortInLoopRule(),
+            new InterproceduralLoopJoinRule($projectIndex),
         ]);
 
         $diagnosticCount = 0;
