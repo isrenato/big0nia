@@ -211,7 +211,21 @@ final class InterproceduralLoopJoinRule implements LoopRule
     private function findRootedArgPosition(MethodCall|StaticCall|FuncCall $call, string $trackedVar): ?int
     {
         foreach ($call->args as $position => $arg) {
-            if ($arg instanceof Arg && $this->joinMatcher->isRootedInVar($arg->value, $trackedVar)) {
+            if (!$arg instanceof Arg) {
+                continue;
+            }
+
+            // A spread argument makes every subsequent positional index unreliable
+            // (its length is unknown at analysis time), so treat the whole call site
+            // as unresolvable from this point on rather than risk mis-binding.
+            if ($arg->unpack) {
+                return null;
+            }
+
+            // A named argument does not occupy its array index's positional slot —
+            // skip it rather than returning a position that may not correspond to
+            // the parameter the analyzer would look up by index.
+            if ($arg->name === null && $this->joinMatcher->isRootedInVar($arg->value, $trackedVar)) {
                 return $position;
             }
         }
@@ -222,7 +236,15 @@ final class InterproceduralLoopJoinRule implements LoopRule
     private function findIndexedArgPosition(MethodCall|StaticCall|FuncCall $call, ForLoopBinding $binding): ?int
     {
         foreach ($call->args as $position => $arg) {
-            if ($arg instanceof Arg && $this->joinMatcher->isRootedInIndexedAccess($arg->value, $binding)) {
+            if (!$arg instanceof Arg) {
+                continue;
+            }
+
+            if ($arg->unpack) {
+                return null;
+            }
+
+            if ($arg->name === null && $this->joinMatcher->isRootedInIndexedAccess($arg->value, $binding)) {
                 return $position;
             }
         }
