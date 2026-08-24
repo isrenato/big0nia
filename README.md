@@ -139,11 +139,15 @@ class UserService {
 
 class OrderMatcher {
     public function matchAll($user): void {
-        foreach ($this->orders as $order) {
+        foreach ($this->orders() as $order) {
             if ($user->getId() === $order->getUserId()) {
                 // ...
             }
         }
+    }
+
+    private function orders(): array {
+        return [];
     }
 }
 ```
@@ -151,13 +155,13 @@ class OrderMatcher {
 `big0nia` reports:
 
 ```
-tests/UserService.php:15
-  Potential O(n × m) algorithm: every user is compared against every order
+tests/Console/data/interprocedural/UserService.php:15
+  Potential O(n × m) algorithm: every item is compared against every order
   using getId() vs getUserId(), via OrderMatcher::matchAll(). Estimated
-  complexity: O(users × orders).
-  Tip: Index orders by userId before the loop, then look up matches instead
-  of scanning (inner loop at tests/OrderMatcher.php:11). Possible complexity
-  after optimization: O(users + orders).
+  complexity: O(users × order).
+  Tip: Index order by userId before the loop, then look up matches instead
+  of scanning (inner loop at tests/Console/data/interprocedural/OrderMatcher.php:11).
+  Possible complexity after optimization: O(users + order).
 ```
 
 The detector resolves four call patterns: typed properties
@@ -168,14 +172,13 @@ exactly one class that directly implements the interface. Local `new`-assigned
 types are resolved only from same-level preceding statements, not from inside
 conditional branches. Only positional call arguments are matched — named
 arguments or spread/unpacked arguments break the chain entirely. The call chain
-can be arbitrarily transitive (multiple hops), and the reported message names
-the full chain; the tip additionally names the file and line of the actual
-inner loop when it differs from the outer loop's own file. Scope is `foreach`
-loops and canonical indexed `for` loops only — the same narrow set the
-intra-procedural detector already documents — and `while` loops are not yet
-supported for cross-call detection. Suppressions apply: a finding is reported
-only when both the outer and inner collections are not provably small (5 items
-or fewer by array literal or default value).
+can span multiple hops (up to a bounded depth), and the reported message names
+the full chain; the tip always names the file and line of the actual inner
+loop. Scope is `foreach` loops and canonical indexed `for` loops only — the
+same narrow set the intra-procedural detector already documents — and `while`
+loops are not yet supported for cross-call detection. Suppressions apply: a
+finding is reported only when both the outer and inner collections are not
+provably small (5 items or fewer by array literal or default value).
 
 ## Install
 
