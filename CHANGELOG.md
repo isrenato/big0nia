@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Detects nested-loop joins when the inner loop lives across a method or
+  function call boundary (not directly in the outer loop's body) via a new
+  `InterproceduralLoopJoinRule`. Resolves call chains through four patterns:
+  typed properties (`$this->service->method()`), local variables assigned via
+  `new` (`$x = new Foo(); $x->method()`), static calls (`Foo::method()`), and
+  free functions (`helper()`). For interface-typed properties, resolves to a
+  concrete class only when exactly one class directly implements the interface.
+  The call chain can be arbitrarily transitive (multiple hops); the reported
+  message names the full chain and the tip names the file and line of the inner
+  loop when it differs from the outer loop. Positional arguments only — named
+  arguments or spread/unpacked arguments break the chain entirely. Scope is
+  `foreach` loops and canonical indexed `for` loops only; `while`-based
+  interprocedural detection is planned. Suppressions apply under the same
+  collection-size rules as the intra-procedural detectors.
+
 ## [0.4.0] - 2026-08-21
 
 ### Added
