@@ -364,6 +364,147 @@ final class InterproceduralLoopJoinRuleTest extends TestCase
         return (new ProjectIndexBuilder())->build($files);
     }
 
+    public function testResolvesALocalNewAssignedVariableHop(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/UserService.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class UserService {
+                    public function process(array $users): void {
+                        $matcher = new OrderMatcher();
+                        foreach ($users as $user) {
+                            $matcher->matchAll($user);
+                        }
+                    }
+                }
+                PHP,
+            '/virtual/OrderMatcher.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class OrderMatcher {
+                    public function matchAll($user): void {
+                        foreach ($this->orders as $order) {
+                            if ($user->getId() === $order->getUserId()) {
+                                // match
+                            }
+                        }
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $class = $index->findClass('App\\UserService');
+        self::assertNotNull($class);
+        $method = $class->node->getMethod('process');
+        self::assertNotNull($method);
+        $outer = (new \PhpParser\NodeFinder())->findFirstInstanceOf($method->stmts ?? [], Foreach_::class);
+        self::assertInstanceOf(Foreach_::class, $outer);
+        $precedingStmts = array_slice($method->stmts ?? [], 0, 1);
+
+        $finding = $rule->check($outer, $precedingStmts);
+
+        self::assertNotNull($finding);
+        self::assertStringContainsString('via OrderMatcher::matchAll()', $finding->message);
+    }
+
+    public function testChainBreaksOnAnUnresolvableCallTarget(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/UserService.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class UserService {
+                    public function __construct(private \Vendor\External $external) {}
+                    public function process(array $users): void {
+                        foreach ($users as $user) {
+                            $this->external->handle($user);
+                        }
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $outer = $this->findFirstForeach($index, 'App\\UserService', 'process');
+
+        self::assertNull($rule->check($outer, []));
+    }
+
+    public function testDoesNotHangOrDoubleReportOnACallCycle(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/A.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class A {
+                    public function __construct(private B $b) {}
+                    public function process(array $users): void {
+                        foreach ($users as $user) {
+                            $this->b->step($user);
+                        }
+                    }
+                    public function step($user): void {
+                        $this->b->step($user);
+                    }
+                }
+                PHP,
+            '/virtual/B.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class B {
+                    public function __construct(private A $a) {}
+                    public function step($user): void {
+                        $this->a->step($user);
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $outer = $this->findFirstForeach($index, 'App\\A', 'process');
+
+        self::assertNull($rule->check($outer, []));
+    }
+
+    public function testSuppressesWhenTheInnerCollectionInAnotherClassIsASmallFixedArray(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/UserService.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class UserService {
+                    public function __construct(private StatusMatcher $matcher) {}
+                    public function process(array $users): void {
+                        foreach ($users as $user) {
+                            $this->matcher->matchAll($user);
+                        }
+                    }
+                }
+                PHP,
+            '/virtual/StatusMatcher.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class StatusMatcher {
+                    private array $statuses = ['a', 'b'];
+                    public function matchAll($user): void {
+                        foreach ($this->statuses as $status) {
+                            if ($user->getId() === $status->getId()) {
+                                // match
+                            }
+                        }
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $outer = $this->findFirstForeach($index, 'App\\UserService', 'process');
+
+        self::assertNull($rule->check($outer, []));
+    }
+
     private function findFirstForeach(ProjectIndex $index, string $classFqcn, string $methodName): Foreach_
     {
         $class = $index->findClass($classFqcn);
