@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `InterproceduralLoopJoinRule` now also resolves same-class calls via
+  `$this->method()` and `self::method()`, and follows a call written as
+  `return $this->service->method();` (a direct method-to-method delegation),
+  neither of which the four patterns shipped in 0.5.0 covered. `static::`
+  (late static binding) and `parent::` remain unresolved on purpose — either
+  could name a class this project can't safely identify.
+
+### Fixed
+
+- A `new`-assigned local variable conditionally reassigned to a different
+  class inside a nested `if`/loop block, between the assignment and its use,
+  could be resolved to the wrong class — `CallTargetResolver` now detects any
+  reassignment it can't fully account for and drops the finding instead of
+  guessing.
+
 ## [0.5.0] - 2026-08-26
 
 ### Added
