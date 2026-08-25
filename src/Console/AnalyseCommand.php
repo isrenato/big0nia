@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Console;
 
 use Doloto\Big0nia\Analysis\FileAnalyser;
+use Doloto\Big0nia\Analysis\PhpFileParser;
+use Doloto\Big0nia\Project\ProjectIndexBuilder;
 use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
+use Doloto\Big0nia\Rule\InterproceduralLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
 use Doloto\Big0nia\Rule\RepeatedSortInLoopRule;
@@ -34,26 +37,32 @@ final class AnalyseCommand
         $files = $this->collectPhpFiles($paths, $hasMissingPath);
 
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $analyser = new FileAnalyser($parser, [
+        $fileParser = new PhpFileParser($parser);
+
+        $parsedFiles = [];
+        $hasSkippedFile = false;
+        foreach ($files as $file) {
+            try {
+                $parsedFiles[] = $fileParser->parse($file);
+            } catch (PhpParserError | RuntimeException $e) {
+                fwrite(STDERR, sprintf("Skipping %s: %s\n", $file, $e->getMessage()));
+                $hasSkippedFile = true;
+            }
+        }
+
+        $projectIndex = (new ProjectIndexBuilder())->build($parsedFiles);
+
+        $analyser = new FileAnalyser([
             new NestedLoopJoinRule(),
             new NestedForLoopJoinRule(),
             new ArrayMergeInLoopRule(),
             new RepeatedSortInLoopRule(),
+            new InterproceduralLoopJoinRule($projectIndex),
         ]);
 
         $diagnosticCount = 0;
-        $hasSkippedFile = false;
-        foreach ($files as $file) {
-            try {
-                $diagnostics = $analyser->analyse($file);
-            } catch (PhpParserError | RuntimeException $e) {
-                fwrite(STDERR, sprintf("Skipping %s: %s\n", $file, $e->getMessage()));
-                $hasSkippedFile = true;
-
-                continue;
-            }
-
-            foreach ($diagnostics as $diagnostic) {
+        foreach ($parsedFiles as $parsedFile) {
+            foreach ($analyser->analyse($parsedFile) as $diagnostic) {
                 $diagnosticCount++;
                 echo sprintf("%s:%d\n", $diagnostic->file, $diagnostic->line);
                 echo sprintf("  %s\n", $diagnostic->message);

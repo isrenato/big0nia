@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Tests\Analysis;
 
 use Doloto\Big0nia\Analysis\FileAnalyser;
+use Doloto\Big0nia\Analysis\PhpFileParser;
 use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
 use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
 use Doloto\Big0nia\Rule\RepeatedSortInLoopRule;
-use PhpParser\ErrorHandler;
-use PhpParser\Parser;
 use PhpParser\ParserFactory;
 use PHPUnit\Framework\TestCase;
 
@@ -18,15 +17,14 @@ final class FileAnalyserTest extends TestCase
 {
     public function testFindsExpectedDiagnosticsAndSuppressesFalsePositives(): void
     {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $analyser = new FileAnalyser($parser, [new NestedLoopJoinRule()]);
+        $analyser = new FileAnalyser([new NestedLoopJoinRule()]);
+        $parsed = $this->parseFixture('nested-loop-join.php');
 
-        $fixture = __DIR__ . '/data/nested-loop-join.php';
-        $diagnostics = $analyser->analyse($fixture);
+        $diagnostics = $analyser->analyse($parsed);
 
         self::assertCount(2, $diagnostics);
 
-        self::assertSame($fixture, $diagnostics[0]->file);
+        self::assertSame($parsed->filePath, $diagnostics[0]->file);
         self::assertSame(39, $diagnostics[0]->line);
         self::assertSame(
             'Potential O(n × m) algorithm: every user is compared against every order using getId() vs getUserId(). Estimated complexity: O(users × orders).',
@@ -42,11 +40,10 @@ final class FileAnalyserTest extends TestCase
 
     public function testDoesNotOverSuppressEmptyLiteralOrNonLiteralReassignment(): void
     {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $analyser = new FileAnalyser($parser, [new NestedLoopJoinRule()]);
+        $analyser = new FileAnalyser([new NestedLoopJoinRule()]);
+        $parsed = $this->parseFixture('collection-size-edge-cases.php');
 
-        $fixture = __DIR__ . '/data/collection-size-edge-cases.php';
-        $diagnostics = $analyser->analyse($fixture);
+        $diagnostics = $analyser->analyse($parsed);
 
         self::assertCount(2, $diagnostics);
         self::assertSame(43, $diagnostics[0]->line);
@@ -55,11 +52,10 @@ final class FileAnalyserTest extends TestCase
 
     public function testDetectsCanonicalForLoopJoinButNotNonCanonicalForm(): void
     {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $analyser = new FileAnalyser($parser, [new NestedLoopJoinRule(), new NestedForLoopJoinRule()]);
+        $analyser = new FileAnalyser([new NestedLoopJoinRule(), new NestedForLoopJoinRule()]);
+        $parsed = $this->parseFixture('nested-for-loop-join.php');
 
-        $fixture = __DIR__ . '/data/nested-for-loop-join.php';
-        $diagnostics = $analyser->analyse($fixture);
+        $diagnostics = $analyser->analyse($parsed);
 
         self::assertCount(1, $diagnostics);
         self::assertSame(31, $diagnostics[0]->line);
@@ -71,11 +67,10 @@ final class FileAnalyserTest extends TestCase
 
     public function testDetectsSelfReferentialArrayMergeButNotUnrelatedOrSuppressedForms(): void
     {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $analyser = new FileAnalyser($parser, [new ArrayMergeInLoopRule()]);
+        $analyser = new FileAnalyser([new ArrayMergeInLoopRule()]);
+        $parsed = $this->parseFixture('array-merge-in-loop.php');
 
-        $fixture = __DIR__ . '/data/array-merge-in-loop.php';
-        $diagnostics = $analyser->analyse($fixture);
+        $diagnostics = $analyser->analyse($parsed);
 
         self::assertCount(1, $diagnostics);
         self::assertSame(17, $diagnostics[0]->line);
@@ -87,11 +82,10 @@ final class FileAnalyserTest extends TestCase
 
     public function testDetectsLoopInvariantSortButNotVariantOrSuppressedForms(): void
     {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $analyser = new FileAnalyser($parser, [new RepeatedSortInLoopRule()]);
+        $analyser = new FileAnalyser([new RepeatedSortInLoopRule()]);
+        $parsed = $this->parseFixture('repeated-sort-in-loop.php');
 
-        $fixture = __DIR__ . '/data/repeated-sort-in-loop.php';
-        $diagnostics = $analyser->analyse($fixture);
+        $diagnostics = $analyser->analyse($parsed);
 
         self::assertCount(1, $diagnostics);
         self::assertSame(16, $diagnostics[0]->line);
@@ -101,37 +95,10 @@ final class FileAnalyserTest extends TestCase
         );
     }
 
-    public function testSuppressesDeprecationNoticesOnlyDuringParsing(): void
+    private function parseFixture(string $name): \Doloto\Big0nia\Analysis\ParsedFile
     {
-        $levelBeforeTest = error_reporting();
-        error_reporting(E_ALL);
-        $originalLevel = error_reporting();
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
 
-        $parser = new class () implements Parser {
-            public ?int $levelDuringParse = null;
-
-            public function parse(string $code, ?ErrorHandler $errorHandler = null): ?array
-            {
-                $this->levelDuringParse = error_reporting();
-
-                return [];
-            }
-
-            public function getTokens(): array
-            {
-                return [];
-            }
-        };
-
-        try {
-            $analyser = new FileAnalyser($parser, [new NestedLoopJoinRule()]);
-            $analyser->analyse(__DIR__ . '/data/nested-loop-join.php');
-
-            self::assertNotNull($parser->levelDuringParse);
-            self::assertSame(0, $parser->levelDuringParse & E_DEPRECATED);
-            self::assertSame($originalLevel, error_reporting());
-        } finally {
-            error_reporting($levelBeforeTest);
-        }
+        return (new PhpFileParser($parser))->parse(__DIR__ . '/data/' . $name);
     }
 }

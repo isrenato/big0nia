@@ -44,6 +44,17 @@ final class JoinSignatureMatcher
 
     /**
      * @param Stmt[] $stmts
+     */
+    public function findVariableAgainstIndexed(array $stmts, string $outerVarName, ForLoopBinding $inner): ?JoinSignature
+    {
+        return $this->findWithMatcher(
+            $stmts,
+            fn (Expr $outerSide, Expr $innerSide): ?JoinSignature => $this->matchVariableAgainstIndexed($outerSide, $outerVarName, $innerSide, $inner)
+        );
+    }
+
+    /**
+     * @param Stmt[] $stmts
      * @param callable(Expr, Expr): ?JoinSignature $matcher
      */
     private function findWithMatcher(array $stmts, callable $matcher): ?JoinSignature
@@ -84,7 +95,23 @@ final class JoinSignatureMatcher
         return new JoinSignature($outerDesc[0], $innerDesc[0], $innerDesc[1]);
     }
 
-    private function isRootedInIndexedAccess(Expr $expr, ForLoopBinding $binding): bool
+    private function matchVariableAgainstIndexed(Expr $outerSide, string $outerVarName, Expr $innerSide, ForLoopBinding $inner): ?JoinSignature
+    {
+        if (!$this->isRootedInVar($outerSide, $outerVarName) || !$this->isRootedInIndexedAccess($innerSide, $inner)) {
+            return null;
+        }
+
+        $outerDesc = $this->describe($outerSide);
+        $innerDesc = $this->describe($innerSide);
+
+        if ($outerDesc === null || $innerDesc === null) {
+            return null;
+        }
+
+        return new JoinSignature($outerDesc[0], $innerDesc[0], $innerDesc[1]);
+    }
+
+    public function isRootedInIndexedAccess(Expr $expr, ForLoopBinding $binding): bool
     {
         if (
             $expr instanceof ArrayDimFetch
@@ -141,7 +168,7 @@ final class JoinSignatureMatcher
         return new JoinSignature($outer[0], $inner[0], $inner[1]);
     }
 
-    private function isRootedInVar(Expr $expr, string $varName): bool
+    public function isRootedInVar(Expr $expr, string $varName): bool
     {
         if ($expr instanceof Variable && $expr->name === $varName) {
             return true;

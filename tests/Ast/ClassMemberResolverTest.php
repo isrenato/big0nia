@@ -369,5 +369,83 @@ final class ClassMemberResolverTest extends TestCase
 
         self::assertNull($resolver->findPropertyDefaultArray($context, 'statuses'));
         self::assertNull($resolver->findMethodReturnArray($context, 'statuses'));
+        self::assertNull($resolver->findPropertyTypeFqcn($context, 'statuses'));
+    }
+
+    public function testFindsDeclaredPropertyTypeFqcn(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            namespace App;
+            class Foo {
+                private \App\Repository\OrderRepository $orderRepo;
+
+                public function marker(): void {
+                    $x = 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertSame('App\\Repository\\OrderRepository', $resolver->findPropertyTypeFqcn($context, 'orderRepo'));
+    }
+
+    public function testFindsPromotedPropertyTypeFqcn(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            namespace App;
+            class Foo {
+                public function __construct(int $count, private \App\Repository\OrderRepository $orderRepo) {
+                    $x = 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertSame('App\\Repository\\OrderRepository', $resolver->findPropertyTypeFqcn($context, 'orderRepo'));
+    }
+
+    public function testReturnsNullForNullableOrUnionOrBuiltinPropertyTypes(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            namespace App;
+            class Foo {
+                private ?\App\Repository\OrderRepository $nullable = null;
+                private array $builtin = [];
+                private \App\A|\App\B $union;
+                private $untyped;
+
+                public function marker(): void {
+                    $x = 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findPropertyTypeFqcn($context, 'nullable'));
+        self::assertNull($resolver->findPropertyTypeFqcn($context, 'builtin'));
+        self::assertNull($resolver->findPropertyTypeFqcn($context, 'union'));
+        self::assertNull($resolver->findPropertyTypeFqcn($context, 'untyped'));
+    }
+
+    public function testReturnsNullWhenPropertyTypeDoesNotExist(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                public function marker(): void {
+                    $x = 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findPropertyTypeFqcn($context, 'missing'));
     }
 }

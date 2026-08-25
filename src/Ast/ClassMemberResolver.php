@@ -13,6 +13,7 @@ use PhpParser\Node\Expr\AssignRef;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\Return_;
@@ -34,6 +35,50 @@ final class ClassMemberResolver
         }
 
         return $default;
+    }
+
+    public function findPropertyTypeFqcn(Node $contextNode, string $propertyName): ?string
+    {
+        $class = $this->findEnclosingClass($contextNode);
+        if ($class === null) {
+            return null;
+        }
+
+        return $this->declaredPropertyTypeFqcn($class, $propertyName)
+            ?? $this->promotedPropertyTypeFqcn($class, $propertyName);
+    }
+
+    private function declaredPropertyTypeFqcn(Class_ $class, string $propertyName): ?string
+    {
+        $property = $class->getProperty($propertyName);
+        if ($property === null || $property->type === null) {
+            return null;
+        }
+
+        return $this->simpleClassTypeFqcn($property->type);
+    }
+
+    private function promotedPropertyTypeFqcn(Class_ $class, string $propertyName): ?string
+    {
+        $constructor = $class->getMethod('__construct');
+        if ($constructor === null) {
+            return null;
+        }
+
+        foreach ($constructor->params as $param) {
+            if ($param->flags === 0 || !$param->var instanceof Variable || $param->var->name !== $propertyName) {
+                continue;
+            }
+
+            return $param->type !== null ? $this->simpleClassTypeFqcn($param->type) : null;
+        }
+
+        return null;
+    }
+
+    private function simpleClassTypeFqcn(Node $type): ?string
+    {
+        return $type instanceof Name ? $type->toString() : null;
     }
 
     private function findDeclaredPropertyDefault(Class_ $class, string $propertyName): ?Array_

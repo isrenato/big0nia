@@ -59,6 +59,18 @@ final class AnalyseCommandTest extends TestCase
         self::assertStringContainsString('Path not found: ' . $missing, $stderr);
     }
 
+    public function testDetectsAnInterproceduralJoinAcrossTwoFiles(): void
+    {
+        $directory = __DIR__ . '/data/interprocedural';
+
+        [$exitCode, $stdout, $stderr] = $this->runBinary(['analyse', $directory]);
+
+        self::assertSame('', $stderr);
+        self::assertSame(1, $exitCode);
+        self::assertStringContainsString('1 issue(s) found.', $stdout);
+        self::assertStringContainsString('via OrderMatcher::matchAll()', $stdout);
+    }
+
     /**
      * @param string[] $args
      * @return array{0: int, 1: string, 2: string}

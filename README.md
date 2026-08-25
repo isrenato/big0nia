@@ -120,6 +120,66 @@ decrementing, is not recognized), `big0nia`:
    array literal (5 items or fewer). Everything else, including a
    collection it can't classify at all, is reported.
 
+## Interprocedural nested-loop joins
+
+When the inner loop lives not in the outer loop's own body, but inside a
+method called from there — possibly in a different class or file — `big0nia`
+traces the call chain and reports the join:
+
+```php
+class UserService {
+    public function __construct(private OrderMatcher $matcher) {}
+
+    public function process(array $users): void {
+        foreach ($users as $user) {
+            $this->matcher->matchAll($user);
+        }
+    }
+}
+
+class OrderMatcher {
+    public function matchAll($user): void {
+        foreach ($this->orders() as $order) {
+            if ($user->getId() === $order->getUserId()) {
+                // ...
+            }
+        }
+    }
+
+    private function orders(): array {
+        return [];
+    }
+}
+```
+
+`big0nia` reports:
+
+```
+tests/Console/data/interprocedural/UserService.php:15
+  Potential O(n × m) algorithm: every item is compared against every order
+  using getId() vs getUserId(), via OrderMatcher::matchAll(). Estimated
+  complexity: O(users × order).
+  Tip: Index order by userId before the loop, then look up matches instead
+  of scanning (inner loop at tests/Console/data/interprocedural/OrderMatcher.php:11).
+  Possible complexity after optimization: O(users + order).
+```
+
+The detector resolves four call patterns: typed properties
+(`$this->service->method()`), local variables assigned via `new`
+(`$x = new Foo(); $x->method()`), static calls (`Foo::method()`), and free
+functions (`helper()`). For interface-typed properties, the project must have
+exactly one class that directly implements the interface. Local `new`-assigned
+types are resolved only from same-level preceding statements, not from inside
+conditional branches. Only positional call arguments are matched — named
+arguments or spread/unpacked arguments break the chain entirely. The call chain
+can span multiple hops (up to a bounded depth), and the reported message names
+the full chain; the tip always names the file and line of the actual inner
+loop. Scope is `foreach` loops and canonical indexed `for` loops only — the
+same narrow set the intra-procedural detector already documents — and `while`
+loops are not yet supported for cross-call detection. Suppressions apply: a
+finding is reported only when both the outer and inner collections are not
+provably small (5 items or fewer by array literal or default value).
+
 ## Install
 
 ```bash
@@ -141,14 +201,21 @@ vendor/bin/big0nia analyse <path> [<path> ...]
   the rest of the run continues.
 - A file that fails to parse or can't be read prints
   `Skipping <path>: <message>` to stderr and the rest of the run continues.
+- Memory usage scales with total analysed project size: every file is parsed
+  and its AST retained up front to build the cross-file symbol index. On very
+  large codebases, pass a higher memory limit to PHP if you hit an
+  out-of-memory error, e.g. `php -d memory_limit=1G vendor/bin/big0nia
+  analyse src/`.
 
 ## Status
 
 v0 ships the nested-loop-join detector for `foreach` (`NestedLoopJoinRule`)
-and canonical indexed `for` loops (`NestedForLoopJoinRule`), the
-self-referential `array_merge()`-in-a-loop detector
-(`ArrayMergeInLoopRule`), and the loop-invariant repeated-sort detector
-(`RepeatedSortInLoopRule`). More performance-anti-pattern rules (Doctrine
+and canonical indexed `for` loops (`NestedForLoopJoinRule`), including
+interprocedural detection when the inner loop lives across a method/function
+call boundary (`InterproceduralLoopJoinRule`), the self-referential
+`array_merge()`-in-a-loop detector (`ArrayMergeInLoopRule`), and the
+loop-invariant repeated-sort detector (`RepeatedSortInLoopRule`). Cross-call
+detection for `while` loops and more performance-anti-pattern rules (Doctrine
 N+1) are planned.
 
 ## License
