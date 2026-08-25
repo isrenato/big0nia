@@ -275,6 +275,46 @@ final class InterproceduralLoopJoinRuleTest extends TestCase
         self::assertStringContainsString('via OrderMatcher::matchOne()', $finding->message);
     }
 
+    public function testFollowsAChainEndingInACanonicalForLoopAsTheInnerLoop(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/UserService.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class UserService {
+                    public function __construct(private OrderMatcher $matcher) {}
+                    public function process(array $users, array $orders): void {
+                        foreach ($users as $user) {
+                            $this->matcher->matchOne($user, $orders);
+                        }
+                    }
+                }
+                PHP,
+            '/virtual/OrderMatcher.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class OrderMatcher {
+                    public function matchOne($user, array $orders): void {
+                        for ($i = 0; $i < count($orders); $i++) {
+                            if ($user->getId() === $orders[$i]->getUserId()) {
+                                // match
+                            }
+                        }
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $outer = $this->findFirstForeach($index, 'App\\UserService', 'process');
+
+        $finding = $rule->check($outer, []);
+
+        self::assertNotNull($finding);
+        self::assertStringContainsString('via OrderMatcher::matchOne()', $finding->message);
+        self::assertStringContainsString('getId() vs getUserId()', $finding->message);
+    }
+
     public function testResolvesAStaticCallHop(): void
     {
         $index = $this->buildIndex([

@@ -16,9 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `new` (`$x = new Foo(); $x->method()`), static calls (`Foo::method()`), and
   free functions (`helper()`). For interface-typed properties, resolves to a
   concrete class only when exactly one class directly implements the interface.
-  The call chain can be arbitrarily transitive (multiple hops); the reported
-  message names the full chain and the tip names the file and line of the inner
-  loop when it differs from the outer loop. Positional arguments only — named
+  The call chain can span multiple hops (up to a bounded depth); the reported
+  message names the full chain and the tip always names the file and line of
+  the inner loop. Positional arguments only — named
   arguments or spread/unpacked arguments break the chain entirely. Scope is
   `foreach` loops and canonical indexed `for` loops only; `while`-based
   interprocedural detection is planned. Suppressions apply under the same

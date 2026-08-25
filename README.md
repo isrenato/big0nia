@@ -201,6 +201,11 @@ vendor/bin/big0nia analyse <path> [<path> ...]
   the rest of the run continues.
 - A file that fails to parse or can't be read prints
   `Skipping <path>: <message>` to stderr and the rest of the run continues.
+- Memory usage scales with total analysed project size: every file is parsed
+  and its AST retained up front to build the cross-file symbol index. On very
+  large codebases, pass a higher memory limit to PHP if you hit an
+  out-of-memory error, e.g. `php -d memory_limit=1G vendor/bin/big0nia
+  analyse src/`.
 
 ## Status
 
