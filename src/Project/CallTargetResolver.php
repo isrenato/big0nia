@@ -58,14 +58,16 @@ final class CallTargetResolver
             return null;
         }
 
-        // `self::` always refers to the class where the code is written,
-        // never subject to runtime override the way `static::` (late
-        // static binding) or `parent::` (a different, unindexed class) are
-        // — safe to resolve directly to the enclosing class. `parent`/
-        // `static` are deliberately left unhandled: NameResolver never
-        // rewrites them, so classMethodTarget()'s lookup of the literal
-        // string "parent"/"static" as a class name naturally fails to
-        // resolve, without needing an explicit early return here.
+        // Only `self::` is handled: it always names the class where the
+        // code is written, so resolving it to the enclosing class is exact.
+        // `static::` (late static binding) and `parent::` could each name a
+        // class that isn't in the enclosing class itself — the former a
+        // subclass override we don't index by, the latter a different,
+        // separately-indexed class — so both are deliberately left
+        // unhandled. NameResolver never rewrites either, so
+        // classMethodTarget()'s lookup of the literal string
+        // "parent"/"static" as a class name naturally fails to resolve,
+        // without needing an explicit early return here.
         if ($call->class->toLowerString() === 'self') {
             $fqcn = $this->memberResolver->findEnclosingClassFqcn($call);
             if ($fqcn === null) {
@@ -144,8 +146,9 @@ final class CallTargetResolver
     private function findLastNewAssignmentTypeFqcn(string $varName, array $stmts): ?string
     {
         $found = null;
+        $foundAt = -1;
 
-        foreach ($stmts as $stmt) {
+        foreach ($stmts as $index => $stmt) {
             if (!$stmt instanceof Expression || !$stmt->expr instanceof Assign) {
                 continue;
             }
@@ -158,43 +161,27 @@ final class CallTargetResolver
             $found = $assign->expr instanceof New_ && $assign->expr->class instanceof Name
                 ? $assign->expr->class->toString()
                 : null;
+            $foundAt = $index;
         }
 
-        if ($found !== null && $this->isReassignedInNestedBlock($stmts, $varName)) {
-            // A conditional reassignment inside an if/loop body could hold
-            // by the time this variable is actually used — the top-level
-            // scan above can't see it, so the type it found can't be
-            // trusted. Under-resolving (null) is safer than mis-resolving
-            // to whichever assignment happened to be last at the top level.
+        if ($found === null) {
             return null;
         }
 
-        return $found;
-    }
-
-    /**
-     * @param Stmt[] $stmts
-     */
-    private function isReassignedInNestedBlock(array $stmts, string $varName): bool
-    {
+        // Only statements AFTER the winning assignment can invalidate it —
+        // anything before is superseded by construction (the loop above
+        // already takes the last top-level match), and re-scanning them
+        // would falsely bail out on the very assignment we just picked.
+        // Any reassignment of $varName found in this tail — nested inside
+        // an if/loop body, or hidden inside a compound expression like
+        // `$x = ($var = new Y());` at the top level — means the value
+        // could differ from what we found by the time the variable is
+        // actually used. Under-resolving (null) is safer than
+        // mis-resolving to a type that's no longer accurate.
+        $tail = array_slice($stmts, $foundAt + 1);
         $isTarget = static fn (Node $target): bool => $target instanceof Variable && $target->name === $varName;
 
-        foreach ($stmts as $stmt) {
-            if ($stmt instanceof Expression && $stmt->expr instanceof Assign) {
-                // A plain top-level `$var = ...;` is already accounted for
-                // by findLastNewAssignmentTypeFqcn's own last-wins scan —
-                // only a reassignment this method can't see (inside a
-                // nested if/loop body, or a top-level compound/reference
-                // assignment it doesn't track) should invalidate the result.
-                continue;
-            }
-
-            if ($this->assignmentFinder->anyAssigns([$stmt], $isTarget)) {
-                return true;
-            }
-        }
-
-        return false;
+        return $this->assignmentFinder->anyAssigns($tail, $isTarget) ? null : $found;
     }
 
     private function classMethodTarget(string $classFqcn, string $methodName): ?CallTarget

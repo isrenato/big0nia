@@ -13,6 +13,15 @@ use PhpParser\Node\Stmt\ClassLike;
 final class SubtreeAssignmentFinder
 {
     /**
+     * Scope-blind: descends into closures, arrow functions, and nested
+     * function declarations the same as any other node, so an assignment
+     * inside one of those counts as a match even though it targets a
+     * variable in its own, separate scope. Correct for `$this->prop`
+     * (closures bind `$this` from their enclosing scope) but an
+     * over-approximation for a plain local variable — an unrelated
+     * same-named local inside a closure can cause an under-resolution
+     * (safe direction) that isn't strictly necessary.
+     *
      * @param Node[] $nodes
      * @param callable(Node): bool $isTarget Returns true when the given
      *        assignment's LHS node is the thing being searched for.

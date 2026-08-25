@@ -90,7 +90,7 @@ final class CallTargetResolverTest extends TestCase
         self::assertSame('App\\UserService', $target->ownerFqcn);
     }
 
-    public function testDoesNotResolveParentOrStaticSpecialClassNames(): void
+    public function testDoesNotResolveStaticSpecialClassName(): void
     {
         $call = $this->firstCallIn(<<<'PHP'
             <?php
@@ -100,6 +100,26 @@ final class CallTargetResolverTest extends TestCase
                     static::helper();
                 }
                 protected static function helper(): void {}
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+
+        self::assertNull($resolver->resolve($call['expr'], []));
+    }
+
+    public function testDoesNotResolveParentSpecialClassName(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class BaseService {
+                protected static function helper(): void {}
+            }
+            class UserService extends BaseService {
+                public function process(): void {
+                    parent::helper();
+                }
             }
             PHP);
 
@@ -150,6 +170,63 @@ final class CallTargetResolverTest extends TestCase
                     if ($cond) {
                         $m = new FastMatcher();
                     }
+                    $m->matchAll();
+                }
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $precedingStmts = array_slice($call['method']->stmts ?? [], 0, -1);
+        $target = $resolver->resolve($call['expr'], $precedingStmts);
+
+        self::assertNull($target);
+    }
+
+    public function testResolvesWhenAnUnconditionalTopLevelAssignmentFollowsANestedOne(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class SlowMatcher {
+                public function matchAll(): void {}
+            }
+            class FastMatcher {
+                public function matchAll(): void {}
+            }
+            class Foo {
+                public function run($cond): void {
+                    if ($cond) {
+                        $m = new FastMatcher();
+                    }
+                    $m = new SlowMatcher();
+                    $m->matchAll();
+                }
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $precedingStmts = array_slice($call['method']->stmts ?? [], 0, -1);
+        $target = $resolver->resolve($call['expr'], $precedingStmts);
+
+        self::assertNotNull($target);
+        self::assertSame('App\\SlowMatcher', $target->ownerFqcn);
+    }
+
+    public function testReturnsNullWhenTheReassignmentIsNestedInsideAnotherExpression(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class SlowMatcher {
+                public function matchAll(): void {}
+            }
+            class FastMatcher {
+                public function matchAll(): void {}
+            }
+            class Foo {
+                public function run(): void {
+                    $m = new SlowMatcher();
+                    $x = ($m = new FastMatcher());
                     $m->matchAll();
                 }
             }

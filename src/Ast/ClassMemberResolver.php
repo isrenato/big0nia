@@ -51,6 +51,11 @@ final class ClassMemberResolver
             ?? $this->promotedPropertyTypeFqcn($class, $propertyName);
     }
 
+    public function findEnclosingClassFqcn(Node $contextNode): ?string
+    {
+        return $this->findEnclosingClass($contextNode)?->namespacedName?->toString();
+    }
+
     private function declaredPropertyTypeFqcn(Class_ $class, string $propertyName): ?string
     {
         $property = $class->getProperty($propertyName);
@@ -120,17 +125,14 @@ final class ClassMemberResolver
 
     private function isReassignedElsewhere(Class_ $class, string $propertyName): bool
     {
+        $isTarget = fn (Node $target): bool => $this->isRootedInThisProperty($target, $propertyName);
+
         foreach ($class->getMethods() as $method) {
             if ($method->stmts === null) {
                 continue;
             }
 
-            $reassigned = $this->assignmentFinder->anyAssigns(
-                $method->stmts,
-                fn (Node $target): bool => $this->isRootedInThisProperty($target, $propertyName)
-            );
-
-            if ($reassigned) {
+            if ($this->assignmentFinder->anyAssigns($method->stmts, $isTarget)) {
                 return true;
             }
         }
@@ -154,11 +156,6 @@ final class ClassMemberResolver
             && $node->var->name === 'this'
             && $node->name instanceof Identifier
             && $node->name->toString() === $propertyName;
-    }
-
-    public function findEnclosingClassFqcn(Node $contextNode): ?string
-    {
-        return $this->findEnclosingClass($contextNode)?->namespacedName?->toString();
     }
 
     public function findMethodReturnArray(Node $contextNode, string $methodName): ?Array_
