@@ -12,6 +12,7 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Stmt;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\If_;
+use PhpParser\Node\Stmt\Return_;
 
 final class CallSiteFinder
 {
@@ -24,8 +25,14 @@ final class CallSiteFinder
         $sites = [];
 
         foreach ($stmts as $index => $stmt) {
-            if ($stmt instanceof Expression) {
-                $call = $this->extractCall($stmt->expr);
+            $stmtExpr = match (true) {
+                $stmt instanceof Expression => $stmt->expr,
+                $stmt instanceof Return_ => $stmt->expr,
+                default => null,
+            };
+
+            if ($stmtExpr !== null) {
+                $call = $this->extractCall($stmtExpr);
                 if ($call !== null) {
                     $sites[] = new CallSite($call, array_slice($stmts, 0, $index));
                 }

@@ -64,6 +64,22 @@ final class CallSiteFinderTest extends TestCase
         self::assertCount(2, $sites[0]->precedingStmts);
     }
 
+    public function testFindsCallInsideAReturnStatement(): void
+    {
+        $stmts = $this->parse(<<<'PHP'
+            <?php
+            $a = 1;
+            return $this->service->process($item);
+            PHP);
+
+        $finder = new CallSiteFinder();
+        $sites = $finder->findAll($stmts);
+
+        self::assertCount(1, $sites);
+        self::assertInstanceOf(MethodCall::class, $sites[0]->call);
+        self::assertCount(1, $sites[0]->precedingStmts);
+    }
+
     public function testDoesNotDescendIntoOtherLoops(): void
     {
         $stmts = $this->parse(<<<'PHP'
