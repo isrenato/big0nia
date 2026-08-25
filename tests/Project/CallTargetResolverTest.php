@@ -46,6 +46,68 @@ final class CallTargetResolverTest extends TestCase
         self::assertSame('App\\OrderRepository', $target->ownerFqcn);
     }
 
+    public function testResolvesDirectThisMethodCall(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class UserService {
+                public function process(): void {
+                    $this->helper();
+                }
+                private function helper(): void {}
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $target = $resolver->resolve($call['expr'], []);
+
+        self::assertNotNull($target);
+        self::assertInstanceOf(ClassMethod::class, $target->node);
+        self::assertSame('helper', $target->node->name->toString());
+        self::assertSame('App\\UserService', $target->ownerFqcn);
+    }
+
+    public function testResolvesSelfStaticCall(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class UserService {
+                public function process(): void {
+                    self::helper();
+                }
+                private static function helper(): void {}
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $target = $resolver->resolve($call['expr'], []);
+
+        self::assertNotNull($target);
+        self::assertInstanceOf(ClassMethod::class, $target->node);
+        self::assertSame('helper', $target->node->name->toString());
+        self::assertSame('App\\UserService', $target->ownerFqcn);
+    }
+
+    public function testDoesNotResolveParentOrStaticSpecialClassNames(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class UserService {
+                public function process(): void {
+                    static::helper();
+                }
+                protected static function helper(): void {}
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+
+        self::assertNull($resolver->resolve($call['expr'], []));
+    }
+
     public function testResolvesLocalNewAssignedVariable(): void
     {
         $call = $this->firstCallIn(<<<'PHP'

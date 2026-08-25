@@ -545,6 +545,48 @@ final class InterproceduralLoopJoinRuleTest extends TestCase
         self::assertNull($rule->check($outer, []));
     }
 
+    public function testResolvesASameClassSelfCallHop(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/UserService.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class UserService {
+                    public function __construct(private OrderMatcher $matcher) {}
+                    public function process(array $users): void {
+                        foreach ($users as $user) {
+                            $this->matchAgainstOrders($user);
+                        }
+                    }
+                    private function matchAgainstOrders($user): void {
+                        $this->matcher->matchAll($user);
+                    }
+                }
+                PHP,
+            '/virtual/OrderMatcher.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class OrderMatcher {
+                    public function matchAll($user): void {
+                        foreach ($this->orders as $order) {
+                            if ($user->getId() === $order->getUserId()) {
+                                // match
+                            }
+                        }
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $outer = $this->findFirstForeach($index, 'App\\UserService', 'process');
+
+        $finding = $rule->check($outer, []);
+
+        self::assertNotNull($finding);
+        self::assertStringContainsString('via UserService::matchAgainstOrders() → OrderMatcher::matchAll()', $finding->message);
+    }
+
     private function findFirstForeach(ProjectIndex $index, string $classFqcn, string $methodName): Foreach_
     {
         $class = $index->findClass($classFqcn);

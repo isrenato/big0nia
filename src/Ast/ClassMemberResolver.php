@@ -186,6 +186,11 @@ final class ClassMemberResolver
             && $node->name->toString() === $propertyName;
     }
 
+    public function findEnclosingClassFqcn(Node $contextNode): ?string
+    {
+        return $this->findEnclosingClass($contextNode)?->namespacedName?->toString();
+    }
+
     public function findMethodReturnArray(Node $contextNode, string $methodName): ?Array_
     {
         $class = $this->findEnclosingClass($contextNode);

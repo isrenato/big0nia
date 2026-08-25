@@ -54,6 +54,23 @@ final class CallTargetResolver
             return null;
         }
 
+        // `self::` always refers to the class where the code is written,
+        // never subject to runtime override the way `static::` (late
+        // static binding) or `parent::` (a different, unindexed class) are
+        // — safe to resolve directly to the enclosing class. `parent`/
+        // `static` are deliberately left unhandled: NameResolver never
+        // rewrites them, so classMethodTarget()'s lookup of the literal
+        // string "parent"/"static" as a class name naturally fails to
+        // resolve, without needing an explicit early return here.
+        if ($call->class->toLowerString() === 'self') {
+            $fqcn = $this->memberResolver->findEnclosingClassFqcn($call);
+            if ($fqcn === null) {
+                return null;
+            }
+
+            return $this->classMethodTarget($fqcn, $call->name->toString());
+        }
+
         return $this->classMethodTarget($call->class->toString(), $call->name->toString());
     }
 
@@ -104,6 +121,10 @@ final class CallTargetResolver
     {
         if ($var instanceof PropertyFetch && $var->var instanceof Variable && $var->var->name === 'this' && $var->name instanceof Identifier) {
             return $this->memberResolver->findPropertyTypeFqcn($var, $var->name->toString());
+        }
+
+        if ($var instanceof Variable && $var->name === 'this') {
+            return $this->memberResolver->findEnclosingClassFqcn($var);
         }
 
         if ($var instanceof Variable && is_string($var->name)) {
