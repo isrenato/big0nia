@@ -133,6 +133,35 @@ final class CallTargetResolverTest extends TestCase
         self::assertSame('App\\Bar', $target->ownerFqcn);
     }
 
+    public function testReturnsNullWhenLocalVariableIsReassignedInsideANestedBlock(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class SlowMatcher {
+                public function matchAll(): void {}
+            }
+            class FastMatcher {
+                public function matchAll(): void {}
+            }
+            class Foo {
+                public function run($cond): void {
+                    $m = new SlowMatcher();
+                    if ($cond) {
+                        $m = new FastMatcher();
+                    }
+                    $m->matchAll();
+                }
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $precedingStmts = array_slice($call['method']->stmts ?? [], 0, -1);
+        $target = $resolver->resolve($call['expr'], $precedingStmts);
+
+        self::assertNull($target);
+    }
+
     public function testResolvesStaticCall(): void
     {
         $call = $this->firstCallIn(<<<'PHP'

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Project;
 
 use Doloto\Big0nia\Ast\ClassMemberResolver;
+use Doloto\Big0nia\Ast\SubtreeAssignmentFinder;
+use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\FuncCall;
@@ -21,11 +23,13 @@ use PhpParser\Node\Stmt\Expression;
 final class CallTargetResolver
 {
     private ClassMemberResolver $memberResolver;
+    private SubtreeAssignmentFinder $assignmentFinder;
 
     public function __construct(
         private readonly ProjectIndex $index,
     ) {
         $this->memberResolver = new ClassMemberResolver();
+        $this->assignmentFinder = new SubtreeAssignmentFinder();
     }
 
     /**
@@ -156,7 +160,41 @@ final class CallTargetResolver
                 : null;
         }
 
+        if ($found !== null && $this->isReassignedInNestedBlock($stmts, $varName)) {
+            // A conditional reassignment inside an if/loop body could hold
+            // by the time this variable is actually used — the top-level
+            // scan above can't see it, so the type it found can't be
+            // trusted. Under-resolving (null) is safer than mis-resolving
+            // to whichever assignment happened to be last at the top level.
+            return null;
+        }
+
         return $found;
+    }
+
+    /**
+     * @param Stmt[] $stmts
+     */
+    private function isReassignedInNestedBlock(array $stmts, string $varName): bool
+    {
+        $isTarget = static fn (Node $target): bool => $target instanceof Variable && $target->name === $varName;
+
+        foreach ($stmts as $stmt) {
+            if ($stmt instanceof Expression && $stmt->expr instanceof Assign) {
+                // A plain top-level `$var = ...;` is already accounted for
+                // by findLastNewAssignmentTypeFqcn's own last-wins scan —
+                // only a reassignment this method can't see (inside a
+                // nested if/loop body, or a top-level compound/reference
+                // assignment it doesn't track) should invalidate the result.
+                continue;
+            }
+
+            if ($this->assignmentFinder->anyAssigns([$stmt], $isTarget)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function classMethodTarget(string $classFqcn, string $methodName): ?CallTarget
