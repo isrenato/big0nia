@@ -7,19 +7,22 @@ namespace Doloto\Big0nia\Ast;
 use PhpParser\Node;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ArrayDimFetch;
-use PhpParser\Node\Expr\Assign;
-use PhpParser\Node\Expr\AssignOp;
-use PhpParser\Node\Expr\AssignRef;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
-use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\Return_;
 
 final class ClassMemberResolver
 {
+    private SubtreeAssignmentFinder $assignmentFinder;
+
+    public function __construct()
+    {
+        $this->assignmentFinder = new SubtreeAssignmentFinder();
+    }
+
     public function findPropertyDefaultArray(Node $contextNode, string $propertyName): ?Array_
     {
         $class = $this->findEnclosingClass($contextNode);
@@ -46,6 +49,11 @@ final class ClassMemberResolver
 
         return $this->declaredPropertyTypeFqcn($class, $propertyName)
             ?? $this->promotedPropertyTypeFqcn($class, $propertyName);
+    }
+
+    public function findEnclosingClassFqcn(Node $contextNode): ?string
+    {
+        return $this->findEnclosingClass($contextNode)?->namespacedName?->toString();
     }
 
     private function declaredPropertyTypeFqcn(Class_ $class, string $propertyName): ?string
@@ -117,55 +125,19 @@ final class ClassMemberResolver
 
     private function isReassignedElsewhere(Class_ $class, string $propertyName): bool
     {
+        $isTarget = fn (Node $target): bool => $this->isRootedInThisProperty($target, $propertyName);
+
         foreach ($class->getMethods() as $method) {
-            if ($method->stmts !== null && $this->subtreeReassigns($method->stmts, $propertyName)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @param Node[] $nodes
-     */
-    private function subtreeReassigns(array $nodes, string $propertyName): bool
-    {
-        foreach ($nodes as $node) {
-            if ($this->isReassignmentOf($node, $propertyName)) {
-                return true;
-            }
-
-            if ($node instanceof ClassLike) {
+            if ($method->stmts === null) {
                 continue;
             }
 
-            foreach ($node->getSubNodeNames() as $subNodeName) {
-                $subNode = $node->$subNodeName;
-
-                if ($subNode instanceof Node && $this->subtreeReassigns([$subNode], $propertyName)) {
-                    return true;
-                }
-
-                if (is_array($subNode)) {
-                    $childNodes = array_filter($subNode, static fn ($item): bool => $item instanceof Node);
-                    if ($this->subtreeReassigns($childNodes, $propertyName)) {
-                        return true;
-                    }
-                }
+            if ($this->assignmentFinder->anyAssigns($method->stmts, $isTarget)) {
+                return true;
             }
         }
 
         return false;
-    }
-
-    private function isReassignmentOf(Node $node, string $propertyName): bool
-    {
-        if (!$node instanceof Assign && !$node instanceof AssignOp && !$node instanceof AssignRef) {
-            return false;
-        }
-
-        return $this->isRootedInThisProperty($node->var, $propertyName);
     }
 
     private function isRootedInThisProperty(Node $node, string $propertyName): bool

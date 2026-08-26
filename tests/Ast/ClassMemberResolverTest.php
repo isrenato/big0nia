@@ -9,6 +9,7 @@ use PhpParser\Node;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\NodeFinder;
 use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitor\NameResolver;
 use PhpParser\NodeVisitor\ParentConnectingVisitor;
 use PhpParser\ParserFactory;
 use PHPUnit\Framework\TestCase;
@@ -22,6 +23,7 @@ final class ClassMemberResolverTest extends TestCase
         self::assertNotNull($ast);
 
         $traverser = new NodeTraverser();
+        $traverser->addVisitor(new NameResolver());
         $traverser->addVisitor(new ParentConnectingVisitor());
         $traverser->traverse($ast);
 
@@ -447,5 +449,34 @@ final class ClassMemberResolverTest extends TestCase
         $resolver = new ClassMemberResolver();
 
         self::assertNull($resolver->findPropertyTypeFqcn($context, 'missing'));
+    }
+
+    public function testFindsEnclosingClassFqcn(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            namespace App;
+            class Foo {
+                public function marker(): void {
+                    $x = 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertSame('App\\Foo', $resolver->findEnclosingClassFqcn($context));
+    }
+
+    public function testReturnsNullForEnclosingClassFqcnWhenNoEnclosingClass(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            $x = 1;
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findEnclosingClassFqcn($context));
     }
 }

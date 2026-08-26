@@ -164,13 +164,18 @@ tests/Console/data/interprocedural/UserService.php:15
   Possible complexity after optimization: O(users + order).
 ```
 
-The detector resolves four call patterns: typed properties
+The detector resolves six call patterns: typed properties
 (`$this->service->method()`), local variables assigned via `new`
-(`$x = new Foo(); $x->method()`), static calls (`Foo::method()`), and free
-functions (`helper()`). For interface-typed properties, the project must have
-exactly one class that directly implements the interface. Local `new`-assigned
-types are resolved only from same-level preceding statements, not from inside
-conditional branches. Only positional call arguments are matched — named
+(`$x = new Foo(); $x->method()`), static calls (`Foo::method()`), free
+functions (`helper()`), and same-class calls via `$this->method()` or
+`self::method()`. `static::`/late static binding and `parent::` are not
+resolved, since either could name a class this project doesn't have enough
+information to identify safely. For interface-typed properties, the project
+must have exactly one class that directly implements the interface. A local
+`new`-assigned variable's type is trusted only when nothing reassigns it
+afterward that this analysis can't fully see — a reassignment inside a
+conditional branch, for instance — otherwise the finding is silently dropped
+rather than guessed at. Only positional call arguments are matched — named
 arguments or spread/unpacked arguments break the chain entirely. The call chain
 can span multiple hops (up to a bounded depth), and the reported message names
 the full chain; the tip always names the file and line of the actual inner

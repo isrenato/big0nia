@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Doloto\Big0nia\Project;
 
 use Doloto\Big0nia\Ast\ClassMemberResolver;
+use Doloto\Big0nia\Ast\SubtreeAssignmentFinder;
+use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\FuncCall;
@@ -21,11 +23,13 @@ use PhpParser\Node\Stmt\Expression;
 final class CallTargetResolver
 {
     private ClassMemberResolver $memberResolver;
+    private SubtreeAssignmentFinder $assignmentFinder;
 
     public function __construct(
         private readonly ProjectIndex $index,
     ) {
         $this->memberResolver = new ClassMemberResolver();
+        $this->assignmentFinder = new SubtreeAssignmentFinder();
     }
 
     /**
@@ -52,6 +56,25 @@ final class CallTargetResolver
     {
         if (!$call->class instanceof Name || !$call->name instanceof Identifier) {
             return null;
+        }
+
+        // Only `self::` is handled: it always names the class where the
+        // code is written, so resolving it to the enclosing class is exact.
+        // `static::` (late static binding) and `parent::` could each name a
+        // class that isn't in the enclosing class itself — the former a
+        // subclass override we don't index by, the latter a different,
+        // separately-indexed class — so both are deliberately left
+        // unhandled. NameResolver never rewrites either, so
+        // classMethodTarget()'s lookup of the literal string
+        // "parent"/"static" as a class name naturally fails to resolve,
+        // without needing an explicit early return here.
+        if ($call->class->toLowerString() === 'self') {
+            $fqcn = $this->memberResolver->findEnclosingClassFqcn($call);
+            if ($fqcn === null) {
+                return null;
+            }
+
+            return $this->classMethodTarget($fqcn, $call->name->toString());
         }
 
         return $this->classMethodTarget($call->class->toString(), $call->name->toString());
@@ -106,6 +129,10 @@ final class CallTargetResolver
             return $this->memberResolver->findPropertyTypeFqcn($var, $var->name->toString());
         }
 
+        if ($var instanceof Variable && $var->name === 'this') {
+            return $this->memberResolver->findEnclosingClassFqcn($var);
+        }
+
         if ($var instanceof Variable && is_string($var->name)) {
             return $this->findLastNewAssignmentTypeFqcn($var->name, $precedingStmts);
         }
@@ -119,8 +146,9 @@ final class CallTargetResolver
     private function findLastNewAssignmentTypeFqcn(string $varName, array $stmts): ?string
     {
         $found = null;
+        $foundAt = -1;
 
-        foreach ($stmts as $stmt) {
+        foreach ($stmts as $index => $stmt) {
             if (!$stmt instanceof Expression || !$stmt->expr instanceof Assign) {
                 continue;
             }
@@ -133,9 +161,27 @@ final class CallTargetResolver
             $found = $assign->expr instanceof New_ && $assign->expr->class instanceof Name
                 ? $assign->expr->class->toString()
                 : null;
+            $foundAt = $index;
         }
 
-        return $found;
+        if ($found === null) {
+            return null;
+        }
+
+        // Only statements AFTER the winning assignment can invalidate it —
+        // anything before is superseded by construction (the loop above
+        // already takes the last top-level match), and re-scanning them
+        // would falsely bail out on the very assignment we just picked.
+        // Any reassignment of $varName found in this tail — nested inside
+        // an if/loop body, or hidden inside a compound expression like
+        // `$x = ($var = new Y());` at the top level — means the value
+        // could differ from what we found by the time the variable is
+        // actually used. Under-resolving (null) is safer than
+        // mis-resolving to a type that's no longer accurate.
+        $tail = array_slice($stmts, $foundAt + 1);
+        $isTarget = static fn (Node $target): bool => $target instanceof Variable && $target->name === $varName;
+
+        return $this->assignmentFinder->anyAssigns($tail, $isTarget) ? null : $found;
     }
 
     private function classMethodTarget(string $classFqcn, string $methodName): ?CallTarget

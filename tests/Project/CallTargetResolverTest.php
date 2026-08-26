@@ -46,6 +46,88 @@ final class CallTargetResolverTest extends TestCase
         self::assertSame('App\\OrderRepository', $target->ownerFqcn);
     }
 
+    public function testResolvesDirectThisMethodCall(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class UserService {
+                public function process(): void {
+                    $this->helper();
+                }
+                private function helper(): void {}
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $target = $resolver->resolve($call['expr'], []);
+
+        self::assertNotNull($target);
+        self::assertInstanceOf(ClassMethod::class, $target->node);
+        self::assertSame('helper', $target->node->name->toString());
+        self::assertSame('App\\UserService', $target->ownerFqcn);
+    }
+
+    public function testResolvesSelfStaticCall(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class UserService {
+                public function process(): void {
+                    self::helper();
+                }
+                private static function helper(): void {}
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $target = $resolver->resolve($call['expr'], []);
+
+        self::assertNotNull($target);
+        self::assertInstanceOf(ClassMethod::class, $target->node);
+        self::assertSame('helper', $target->node->name->toString());
+        self::assertSame('App\\UserService', $target->ownerFqcn);
+    }
+
+    public function testDoesNotResolveStaticSpecialClassName(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class UserService {
+                public function process(): void {
+                    static::helper();
+                }
+                protected static function helper(): void {}
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+
+        self::assertNull($resolver->resolve($call['expr'], []));
+    }
+
+    public function testDoesNotResolveParentSpecialClassName(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class BaseService {
+                protected static function helper(): void {}
+            }
+            class UserService extends BaseService {
+                public function process(): void {
+                    parent::helper();
+                }
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+
+        self::assertNull($resolver->resolve($call['expr'], []));
+    }
+
     public function testResolvesLocalNewAssignedVariable(): void
     {
         $call = $this->firstCallIn(<<<'PHP'
@@ -69,6 +151,92 @@ final class CallTargetResolverTest extends TestCase
         self::assertNotNull($target);
         self::assertSame('baz', $target->node->name->toString());
         self::assertSame('App\\Bar', $target->ownerFqcn);
+    }
+
+    public function testReturnsNullWhenLocalVariableIsReassignedInsideANestedBlock(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class SlowMatcher {
+                public function matchAll(): void {}
+            }
+            class FastMatcher {
+                public function matchAll(): void {}
+            }
+            class Foo {
+                public function run($cond): void {
+                    $m = new SlowMatcher();
+                    if ($cond) {
+                        $m = new FastMatcher();
+                    }
+                    $m->matchAll();
+                }
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $precedingStmts = array_slice($call['method']->stmts ?? [], 0, -1);
+        $target = $resolver->resolve($call['expr'], $precedingStmts);
+
+        self::assertNull($target);
+    }
+
+    public function testResolvesWhenAnUnconditionalTopLevelAssignmentFollowsANestedOne(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class SlowMatcher {
+                public function matchAll(): void {}
+            }
+            class FastMatcher {
+                public function matchAll(): void {}
+            }
+            class Foo {
+                public function run($cond): void {
+                    if ($cond) {
+                        $m = new FastMatcher();
+                    }
+                    $m = new SlowMatcher();
+                    $m->matchAll();
+                }
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $precedingStmts = array_slice($call['method']->stmts ?? [], 0, -1);
+        $target = $resolver->resolve($call['expr'], $precedingStmts);
+
+        self::assertNotNull($target);
+        self::assertSame('App\\SlowMatcher', $target->ownerFqcn);
+    }
+
+    public function testReturnsNullWhenTheReassignmentIsNestedInsideAnotherExpression(): void
+    {
+        $call = $this->firstCallIn(<<<'PHP'
+            <?php
+            namespace App;
+            class SlowMatcher {
+                public function matchAll(): void {}
+            }
+            class FastMatcher {
+                public function matchAll(): void {}
+            }
+            class Foo {
+                public function run(): void {
+                    $m = new SlowMatcher();
+                    $x = ($m = new FastMatcher());
+                    $m->matchAll();
+                }
+            }
+            PHP);
+
+        $resolver = $this->resolverFor($call['file']);
+        $precedingStmts = array_slice($call['method']->stmts ?? [], 0, -1);
+        $target = $resolver->resolve($call['expr'], $precedingStmts);
+
+        self::assertNull($target);
     }
 
     public function testResolvesStaticCall(): void
