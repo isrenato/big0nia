@@ -137,6 +137,21 @@ final class LinearScanInLoopRuleTest extends TestCase
         self::assertNull($rule->check($outer, []));
     }
 
+    public function testConditionalBreakInsideMatchingIfStillReportsFinding(): void
+    {
+        $rule = new LinearScanInLoopRule();
+
+        $call = new FuncCall(new Name('in_array'), [
+            new Arg(new MethodCall(new Variable('user'), 'getId')),
+            new Arg(new Variable('bannedIds')),
+        ]);
+        $outer = new Foreach_(new Variable('users'), new Variable('user'), [
+            'stmts' => [new If_($call, ['stmts' => [new Break_()]])],
+        ]);
+
+        self::assertNotNull($rule->check($outer, []));
+    }
+
     public function testReturnsNullWhenNeedleIsNotRootedInTheLoopVariable(): void
     {
         $rule = new LinearScanInLoopRule();
