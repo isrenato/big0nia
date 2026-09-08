@@ -9,6 +9,7 @@ use Doloto\Big0nia\Analysis\PhpFileParser;
 use Doloto\Big0nia\Project\ProjectIndexBuilder;
 use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
 use Doloto\Big0nia\Rule\InterproceduralLoopJoinRule;
+use Doloto\Big0nia\Rule\LinearScanInLoopRule;
 use Doloto\Big0nia\Rule\NestedForLoopJoinRule;
 use Doloto\Big0nia\Rule\NestedLoopJoinRule;
 use Doloto\Big0nia\Rule\RepeatedSortInLoopRule;
@@ -58,6 +59,7 @@ final class AnalyseCommand
             new ArrayMergeInLoopRule(),
             new RepeatedSortInLoopRule(),
             new InterproceduralLoopJoinRule($projectIndex),
+            new LinearScanInLoopRule(),
         ]);
 
         $diagnosticCount = 0;
