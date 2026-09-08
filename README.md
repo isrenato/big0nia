@@ -1,10 +1,19 @@
 # big0nia
 
-A standalone static analyzer that detects algorithmic-complexity
-anti-patterns in PHP: nested loops which are secretly an expensive
-collection join, `array_merge()` calls that silently turn a loop into
-O(n²) by rebuilding the same array on every iteration, and sorts that
+A standalone static analysis tool for PHP and Symfony that automatically
+detects algorithmic-complexity (Big-O) issues and performance
+anti-patterns before they hit production: nested `foreach`/`for` loops
+that scale at O(n²) or O(n × m) because they're secretly an expensive
+collection join (including across a method/function call boundary),
+`in_array()`/`array_search()` calls inside a loop that turn a lookup into
+a linear scan, `array_merge()` calls that silently turn a loop into O(n²)
+by rebuilding the same array on every iteration, and sorts that
 redundantly re-sort data nothing in the loop ever changes.
+
+Complexity/performance analysis is a different lane from what
+general-purpose static analyzers like PHPStan or Psalm check — they focus
+on type safety, bug patterns, and code smells, not asymptotic complexity.
+big0nia is meant to run alongside them, not replace them.
 
 ## The problem it finds
 
@@ -89,6 +98,38 @@ in the loop — including inside a nested loop — the sort is legitimate and
 not flagged, and the finding is suppressed under the same size-based rules
 as the other two detectors when the loop provably iterates a small fixed
 collection.
+
+## Linear scans inside a loop
+
+```php
+foreach ($users as $user) {
+    if (in_array($user->getId(), $bannedIds)) {
+        // ...
+    }
+}
+```
+
+`in_array()` and `array_search()` scan their entire haystack argument every
+time they're called, so calling one on every iteration of a loop is the
+same O(n × m) blowup as a nested-loop join — it just doesn't look like one,
+since there's no visible inner loop. `big0nia` reports:
+
+```
+tests/data/example.php:2
+  Potential O(n × m) algorithm: every user is checked against bannedIds
+  using in_array(). Estimated complexity: O(users × bannedIds).
+  Tip: Flip bannedIds into a lookup map (e.g. array_flip() or keyed by the
+  value being searched) before the loop, then use isset()/array_key_exists()
+  instead of in_array(). Possible complexity after optimization:
+  O(users + bannedIds).
+```
+
+`isset()`, `array_key_exists()`, and direct array-key access are never
+flagged — those are already O(1) hash lookups, which is exactly the fix
+this rule suggests. The finding is suppressed under the same size-based
+rules as the other detectors when the scanned collection provably has a
+fixed size, and when the loop itself is structurally bounded to a single
+pass by an unconditional `break`/`return`/`throw`.
 
 ## How nested-loop-join detection works
 
@@ -218,10 +259,15 @@ v0 ships the nested-loop-join detector for `foreach` (`NestedLoopJoinRule`)
 and canonical indexed `for` loops (`NestedForLoopJoinRule`), including
 interprocedural detection when the inner loop lives across a method/function
 call boundary (`InterproceduralLoopJoinRule`), the self-referential
-`array_merge()`-in-a-loop detector (`ArrayMergeInLoopRule`), and the
-loop-invariant repeated-sort detector (`RepeatedSortInLoopRule`). Cross-call
-detection for `while` loops and more performance-anti-pattern rules (Doctrine
-N+1) are planned.
+`array_merge()`-in-a-loop detector (`ArrayMergeInLoopRule`), the
+loop-invariant repeated-sort detector (`RepeatedSortInLoopRule`), and the
+`in_array()`/`array_search()` linear-scan-in-a-loop detector
+(`LinearScanInLoopRule`). Fixed-size collections (array literals of any
+size, `self::CONST`/`static::CONST` array constants, and literal-bound
+`range()` calls) and loops structurally bounded to a single pass by an
+unconditional `break`/`return`/`throw` are recognized and excluded from
+every rule above. Cross-call detection for `while` loops and more
+performance-anti-pattern rules (Doctrine N+1) are planned.
 
 ## License
 
