@@ -102,6 +102,16 @@ final class ConfigLoaderTest extends TestCase
         (new ConfigLoader())->load($this->tempDir);
     }
 
+    public function testThrowsWhenConfigFileDoesNotDecodeToAMap(): void
+    {
+        $this->writeConfig("hello\n");
+
+        $this->expectException(ConfigException::class);
+        $this->expectExceptionMessage('must decode to a map, got string');
+
+        (new ConfigLoader())->load($this->tempDir);
+    }
+
     private function writeConfig(string $contents): void
     {
         file_put_contents($this->tempDir . '/big0nia.neon', $contents);
