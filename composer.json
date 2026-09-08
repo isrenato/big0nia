@@ -1,8 +1,18 @@
 {
     "name": "doloto/big0nia",
-    "description": "A standalone static analyzer that detects algorithmic-complexity and performance anti-patterns in PHP/Symfony code.",
+    "description": "A standalone static analysis tool for PHP and Symfony that automatically detects algorithmic-complexity (Big-O) issues, performance anti-patterns, and nested-loop bottlenecks.",
+    "keywords": [
+        "static analysis",
+        "big-o complexity",
+        "algorithmic complexity",
+        "php performance",
+        "symfony optimization",
+        "code quality",
+        "performance anti-patterns",
+        "refactoring"
+    ],
     "type": "library",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "license": "MIT",
     "authors": [
         {

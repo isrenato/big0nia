@@ -168,6 +168,72 @@ final class ClassMemberResolverTest extends TestCase
         self::assertNull($resolver->findMethodReturnArray($context, 'statuses'));
     }
 
+    public function testFindsClassConstArrayLiteral(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                private const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+                public function marker(): void {
+                    $x = 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+        $const = $resolver->findClassConstArray($context, 'DAYS');
+
+        self::assertNotNull($const);
+        self::assertCount(7, $const->items);
+    }
+
+    public function testReturnsNullWhenClassConstDoesNotExist(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                public function marker(): void {
+                    $x = 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findClassConstArray($context, 'DAYS'));
+    }
+
+    public function testReturnsNullWhenClassConstIsNotAnArrayLiteral(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            class Foo {
+                private const LIMIT = 12;
+
+                public function marker(): void {
+                    $x = 1;
+                }
+            }
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findClassConstArray($context, 'LIMIT'));
+    }
+
+    public function testReturnsNullForClassConstWhenContextNodeHasNoEnclosingClass(): void
+    {
+        $context = $this->contextNodeInside(<<<'PHP'
+            <?php
+            $x = 1;
+            PHP);
+
+        $resolver = new ClassMemberResolver();
+
+        self::assertNull($resolver->findClassConstArray($context, 'DAYS'));
+    }
+
     public function testReturnsNullWhenPropertyDefaultIsReassignedInConstructor(): void
     {
         $context = $this->contextNodeInside(<<<'PHP'
