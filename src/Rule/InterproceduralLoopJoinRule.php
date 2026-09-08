@@ -10,6 +10,7 @@ use Doloto\Big0nia\Ast\CollectionSize;
 use Doloto\Big0nia\Ast\CollectionSizeClassifier;
 use Doloto\Big0nia\Ast\ForLoopBinding;
 use Doloto\Big0nia\Ast\JoinSignatureMatcher;
+use Doloto\Big0nia\Ast\LoopEarlyExitAnalyzer;
 use Doloto\Big0nia\Ast\NestedForeachFinder;
 use Doloto\Big0nia\Ast\NestedForFinder;
 use Doloto\Big0nia\Ast\PrecedingStatementsFinder;
@@ -42,6 +43,7 @@ final class InterproceduralLoopJoinRule implements LoopRule
     private JoinSignatureMatcher $joinMatcher;
     private CollectionSizeClassifier $sizeClassifier;
     private PrecedingStatementsFinder $precedingStatementsFinder;
+    private LoopEarlyExitAnalyzer $earlyExitAnalyzer;
 
     public function __construct(ProjectIndex $index)
     {
@@ -53,6 +55,7 @@ final class InterproceduralLoopJoinRule implements LoopRule
         $this->joinMatcher = new JoinSignatureMatcher();
         $this->sizeClassifier = new CollectionSizeClassifier();
         $this->precedingStatementsFinder = new PrecedingStatementsFinder();
+        $this->earlyExitAnalyzer = new LoopEarlyExitAnalyzer();
     }
 
     public function check(Stmt $loopNode, array $precedingStmts): ?Finding
@@ -82,7 +85,7 @@ final class InterproceduralLoopJoinRule implements LoopRule
 
         $result = $this->followChain($loopNode->stmts, $loopNode->valueVar->name, '', [], [], null, $precedingStmts);
 
-        return $result === null ? null : $this->buildFinding($loopNode->getLine(), $outerCollectionName, $outerClass, $result);
+        return $result === null ? null : $this->buildFinding($loopNode->getLine(), $outerCollectionName, $outerClass, $result, $loopNode->stmts);
     }
 
     /**
@@ -100,7 +103,7 @@ final class InterproceduralLoopJoinRule implements LoopRule
 
         $result = $this->followChain($loopNode->stmts, '', '', [], [], $binding, $precedingStmts);
 
-        return $result === null ? null : $this->buildFinding($loopNode->getLine(), $outerCollectionName, $outerClass, $result);
+        return $result === null ? null : $this->buildFinding($loopNode->getLine(), $outerCollectionName, $outerClass, $result, $loopNode->stmts);
     }
 
     /**
@@ -188,7 +191,15 @@ final class InterproceduralLoopJoinRule implements LoopRule
                 $innerCollectionName = $this->exprLabel($foreachLoop->expr) ?? $foreachLoop->valueVar->name;
                 $innerClass = $this->sizeClassifier->classify($foreachLoop->expr, $this->precedingStatementsFinder->find($foreachLoop));
 
-                return new InterproceduralJoinResult($signature, $innerCollectionName, $innerClass, $filePath, $foreachLoop->getLine(), $chainLabels);
+                return new InterproceduralJoinResult(
+                    $signature,
+                    $innerCollectionName,
+                    $innerClass,
+                    $filePath,
+                    $foreachLoop->getLine(),
+                    $chainLabels,
+                    $this->earlyExitAnalyzer->boundsToOnePass($foreachLoop->stmts)
+                );
             }
         }
 
@@ -200,7 +211,15 @@ final class InterproceduralLoopJoinRule implements LoopRule
                 if ($signature !== null) {
                     $innerClass = $this->sizeClassifier->classify(new Variable($binding->collectionVarName), $this->precedingStatementsFinder->find($forLoop));
 
-                    return new InterproceduralJoinResult($signature, $binding->collectionVarName, $innerClass, $filePath, $forLoop->getLine(), $chainLabels);
+                    return new InterproceduralJoinResult(
+                        $signature,
+                        $binding->collectionVarName,
+                        $innerClass,
+                        $filePath,
+                        $forLoop->getLine(),
+                        $chainLabels,
+                        $this->earlyExitAnalyzer->boundsToOnePass($forLoop->stmts)
+                    );
                 }
             }
         }
@@ -279,9 +298,16 @@ final class InterproceduralLoopJoinRule implements LoopRule
         return $pos === false ? $fqcn : substr($fqcn, $pos + 1);
     }
 
-    private function buildFinding(int $line, string $outerCollectionName, CollectionSize $outerClass, InterproceduralJoinResult $result): ?Finding
+    /**
+     * @param Stmt[] $outerStmts
+     */
+    private function buildFinding(int $line, string $outerCollectionName, CollectionSize $outerClass, InterproceduralJoinResult $result, array $outerStmts): ?Finding
     {
         if ($outerClass === CollectionSize::FixedSmall || $result->innerCollectionSize === CollectionSize::FixedSmall) {
+            return null;
+        }
+
+        if ($this->earlyExitAnalyzer->boundsToOnePass($outerStmts) || $result->innerBoundsToOnePass) {
             return null;
         }
 

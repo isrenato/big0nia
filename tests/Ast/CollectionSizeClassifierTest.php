@@ -6,13 +6,18 @@ namespace Doloto\Big0nia\Tests\Ast;
 
 use Doloto\Big0nia\Ast\CollectionSize;
 use Doloto\Big0nia\Ast\CollectionSizeClassifier;
+use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
+use PhpParser\Node\Scalar\Int_;
+use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\Foreach_;
 use PhpParser\NodeFinder;
@@ -31,7 +36,7 @@ final class CollectionSizeClassifierTest extends TestCase
         $big = new Array_(array_fill(0, 6, new ArrayItem(new Variable('x'))));
 
         self::assertSame(CollectionSize::FixedSmall, $classifier->classify($small, []));
-        self::assertSame(CollectionSize::Unbounded, $classifier->classify($big, []));
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify($big, []));
     }
 
     public function testClassifiesVariableViaPrecedingLiteralAssignment(): void
@@ -65,11 +70,11 @@ final class CollectionSizeClassifierTest extends TestCase
             new Expression(new Assign(new Variable('statuses'), new Array_([new ArrayItem(new Variable('a'))]))),
             new Expression(new Assign(
                 new Variable('statuses'),
-                new Array_(array_fill(0, 6, new ArrayItem(new Variable('x'))))
+                new Array_(array_fill(0, 8, new ArrayItem(new Variable('x'))))
             )),
         ];
 
-        self::assertSame(CollectionSize::Unbounded, $classifier->classify(new Variable('statuses'), $stmts));
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify(new Variable('statuses'), $stmts));
     }
 
     public function testEmptyArrayLiteralClassifiesAsUnknownNotFixedSmall(): void
@@ -180,6 +185,107 @@ final class CollectionSizeClassifierTest extends TestCase
                 }
             }
             PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::Unknown, $classifier->classify($expr, []));
+    }
+
+    public function testClassifiesSelfClassConstantArrayAsFixedSmall(): void
+    {
+        $expr = $this->parseAndFindLastExpr(<<<'PHP'
+            <?php
+            class Foo {
+                private const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+                public function m(): void {
+                    foreach (self::DAYS as $day) {
+                    }
+                }
+            }
+            PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify($expr, []));
+    }
+
+    public function testClassifiesStaticClassConstantArrayAsFixedSmall(): void
+    {
+        $expr = $this->parseAndFindLastExpr(<<<'PHP'
+            <?php
+            class Foo {
+                private const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+                public function m(): void {
+                    foreach (static::MONTHS as $month) {
+                    }
+                }
+            }
+            PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify($expr, []));
+    }
+
+    public function testReturnsUnknownForACrossClassConstant(): void
+    {
+        $expr = $this->parseAndFindLastExpr(<<<'PHP'
+            <?php
+            class Foo {
+                public function m(): void {
+                    foreach (Bar::MONTHS as $month) {
+                    }
+                }
+            }
+            PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::Unknown, $classifier->classify($expr, []));
+    }
+
+    public function testReturnsUnknownForASelfConstantThatIsNotAnArray(): void
+    {
+        $expr = $this->parseAndFindLastExpr(<<<'PHP'
+            <?php
+            class Foo {
+                private const LIMIT = 12;
+
+                public function m(): void {
+                    foreach (self::LIMIT as $n) {
+                    }
+                }
+            }
+            PHP);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::Unknown, $classifier->classify($expr, []));
+    }
+
+    public function testClassifiesRangeWithLiteralBoundsAsFixedSmall(): void
+    {
+        $expr = new FuncCall(new Name('range'), [new Arg(new Int_(1)), new Arg(new Int_(12))]);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify($expr, []));
+    }
+
+    public function testClassifiesRangeWithLiteralStringBoundsAsFixedSmall(): void
+    {
+        $expr = new FuncCall(new Name('range'), [new Arg(new String_('a')), new Arg(new String_('z'))]);
+
+        $classifier = new CollectionSizeClassifier();
+
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify($expr, []));
+    }
+
+    public function testReturnsUnknownForRangeWithAVariableBound(): void
+    {
+        $expr = new FuncCall(new Name('range'), [new Arg(new Int_(1)), new Arg(new Variable('n'))]);
 
         $classifier = new CollectionSizeClassifier();
 

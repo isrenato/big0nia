@@ -7,6 +7,7 @@ namespace Doloto\Big0nia\Rule;
 use Doloto\Big0nia\Ast\CollectionSize;
 use Doloto\Big0nia\Ast\CollectionSizeClassifier;
 use Doloto\Big0nia\Ast\JoinSignatureMatcher;
+use Doloto\Big0nia\Ast\LoopEarlyExitAnalyzer;
 use Doloto\Big0nia\Ast\NestedForeachFinder;
 use Doloto\Big0nia\Complexity\ComplexityLabel;
 use PhpParser\Node;
@@ -21,12 +22,14 @@ final class NestedLoopJoinRule implements LoopRule
     private NestedForeachFinder $foreachFinder;
     private JoinSignatureMatcher $joinMatcher;
     private CollectionSizeClassifier $sizeClassifier;
+    private LoopEarlyExitAnalyzer $earlyExitAnalyzer;
 
     public function __construct()
     {
         $this->foreachFinder = new NestedForeachFinder();
         $this->joinMatcher = new JoinSignatureMatcher();
         $this->sizeClassifier = new CollectionSizeClassifier();
+        $this->earlyExitAnalyzer = new LoopEarlyExitAnalyzer();
     }
 
     /**
@@ -64,6 +67,10 @@ final class NestedLoopJoinRule implements LoopRule
         $innerClass = $this->sizeClassifier->classify($inner->expr, $precedingStmts);
 
         if ($outerClass === CollectionSize::FixedSmall || $innerClass === CollectionSize::FixedSmall) {
+            return null;
+        }
+
+        if ($this->earlyExitAnalyzer->boundsToOnePass($node->stmts) || $this->earlyExitAnalyzer->boundsToOnePass($inner->stmts)) {
             return null;
         }
 

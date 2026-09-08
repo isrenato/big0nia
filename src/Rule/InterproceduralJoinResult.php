@@ -19,6 +19,7 @@ final class InterproceduralJoinResult
         public readonly string $innerFilePath,
         public readonly int $innerLine,
         public readonly array $chainLabels,
+        public readonly bool $innerBoundsToOnePass,
     ) {
     }
 }

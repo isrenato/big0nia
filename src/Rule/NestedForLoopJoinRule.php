@@ -8,6 +8,7 @@ use Doloto\Big0nia\Ast\CanonicalForLoopMatcher;
 use Doloto\Big0nia\Ast\CollectionSize;
 use Doloto\Big0nia\Ast\CollectionSizeClassifier;
 use Doloto\Big0nia\Ast\JoinSignatureMatcher;
+use Doloto\Big0nia\Ast\LoopEarlyExitAnalyzer;
 use Doloto\Big0nia\Ast\NestedForFinder;
 use Doloto\Big0nia\Complexity\ComplexityLabel;
 use PhpParser\Node\Expr\Variable;
@@ -20,6 +21,7 @@ final class NestedForLoopJoinRule implements LoopRule
     private CanonicalForLoopMatcher $forLoopMatcher;
     private JoinSignatureMatcher $joinMatcher;
     private CollectionSizeClassifier $sizeClassifier;
+    private LoopEarlyExitAnalyzer $earlyExitAnalyzer;
 
     public function __construct()
     {
@@ -27,6 +29,7 @@ final class NestedForLoopJoinRule implements LoopRule
         $this->forLoopMatcher = new CanonicalForLoopMatcher();
         $this->joinMatcher = new JoinSignatureMatcher();
         $this->sizeClassifier = new CollectionSizeClassifier();
+        $this->earlyExitAnalyzer = new LoopEarlyExitAnalyzer();
     }
 
     /**
@@ -62,6 +65,10 @@ final class NestedForLoopJoinRule implements LoopRule
         $innerClass = $this->sizeClassifier->classify(new Variable($innerBinding->collectionVarName), $precedingStmts);
 
         if ($outerClass === CollectionSize::FixedSmall || $innerClass === CollectionSize::FixedSmall) {
+            return null;
+        }
+
+        if ($this->earlyExitAnalyzer->boundsToOnePass($loopNode->stmts) || $this->earlyExitAnalyzer->boundsToOnePass($inner->stmts)) {
             return null;
         }
 
