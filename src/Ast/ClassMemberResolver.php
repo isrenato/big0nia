@@ -178,6 +178,24 @@ final class ClassMemberResolver
         return $onlyStmt->expr;
     }
 
+    public function findClassConstArray(Node $contextNode, string $constName): ?Array_
+    {
+        $class = $this->findEnclosingClass($contextNode);
+        if ($class === null) {
+            return null;
+        }
+
+        foreach ($class->getConstants() as $classConst) {
+            foreach ($classConst->consts as $const) {
+                if ($const->name->toString() === $constName && $const->value instanceof Array_) {
+                    return $const->value;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private function findEnclosingClass(Node $node): ?Class_
     {
         $current = $node;
