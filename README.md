@@ -288,8 +288,10 @@ loop-invariant repeated-sort detector (`RepeatedSortInLoopRule`), and the
 size, `self::CONST`/`static::CONST` array constants, and literal-bound
 `range()` calls) and loops structurally bounded to a single pass by an
 unconditional `break`/`return`/`throw` are recognized and excluded from
-every rule above. Cross-call detection for `while` loops and more
-performance-anti-pattern rules (Doctrine N+1) are planned.
+every rule above. A `big0nia.neon` config file supports one key so far,
+`ignore_paths` (see Configuration above), to exclude vendor code or legacy
+modules from analysis entirely. Cross-call detection for `while` loops and
+more performance-anti-pattern rules (Doctrine N+1) are planned.
 
 ## License
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-09
+
 ### Added
 
 - A `big0nia.neon` config file (auto-discovered in the current working
@@ -18,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   excludes nothing. A malformed config file, or an `ignore_paths` value
   that isn't a list of non-empty strings, is a fatal error: nothing is
   analysed.
+- `LinearScanInLoopRule` detects `in_array()`/`array_search()` calls inside
+  a loop that scan an unbounded collection — a linear-scan pattern the
+  existing nested-loop-join rules couldn't see, since it has no explicit
+  inner-loop AST shape.
+- `CollectionSizeClassifier` now classifies any non-empty array literal as
+  fixed-size regardless of item count (the previous ≤5-item cap is gone),
+  and also recognizes `self::CONST`/`static::CONST` array constants and
+  literal-bound `range()` calls as fixed-size sources.
+- A loop structurally bounded to a single pass by an unconditional
+  `break`/`return`/`throw` is now recognized and excluded from every
+  nested-loop-join rule, reducing false positives on code that only ever
+  runs its outer or inner loop once.
 
 ## [0.6.0] - 2026-08-27
 
