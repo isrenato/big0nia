@@ -18,10 +18,12 @@ use PhpParser\Node\Expr\PostInc;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\Int_;
+use PhpParser\Node\Stmt\Break_;
 use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\For_;
 use PhpParser\Node\Stmt\Foreach_;
 use PhpParser\Node\Stmt\If_;
+use PhpParser\Node\Stmt\Return_;
 use PHPUnit\Framework\TestCase;
 
 final class NestedForLoopJoinRuleTest extends TestCase
@@ -131,6 +133,48 @@ final class NestedForLoopJoinRuleTest extends TestCase
         ]);
 
         self::assertNull($rule->check($nonCanonical, []));
+    }
+
+    public function testSuppressesWhenOuterLoopUnconditionallyBreaksAfterOnePass(): void
+    {
+        $rule = new NestedForLoopJoinRule();
+
+        $comparison = new Identical(
+            new MethodCall(new ArrayDimFetch(new Variable('users'), new Variable('i')), 'getId'),
+            new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+        );
+        $inner = $this->buildForLoop('orders', 'j', [new If_($comparison, ['stmts' => []])]);
+        $outer = $this->buildForLoop('users', 'i', [$inner, new Break_()]);
+
+        self::assertNull($rule->check($outer, []));
+    }
+
+    public function testSuppressesWhenInnerLoopUnconditionallyReturnsAfterOnePass(): void
+    {
+        $rule = new NestedForLoopJoinRule();
+
+        $comparison = new Identical(
+            new MethodCall(new ArrayDimFetch(new Variable('users'), new Variable('i')), 'getId'),
+            new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+        );
+        $inner = $this->buildForLoop('orders', 'j', [new If_($comparison, ['stmts' => []]), new Return_()]);
+        $outer = $this->buildForLoop('users', 'i', [$inner]);
+
+        self::assertNull($rule->check($outer, []));
+    }
+
+    public function testConditionalBreakInsideMatchIfStillReportsFinding(): void
+    {
+        $rule = new NestedForLoopJoinRule();
+
+        $comparison = new Identical(
+            new MethodCall(new ArrayDimFetch(new Variable('users'), new Variable('i')), 'getId'),
+            new MethodCall(new ArrayDimFetch(new Variable('orders'), new Variable('j')), 'getUserId')
+        );
+        $inner = $this->buildForLoop('orders', 'j', [new If_($comparison, ['stmts' => [new Break_()]])]);
+        $outer = $this->buildForLoop('users', 'i', [$inner]);
+
+        self::assertNotNull($rule->check($outer, []));
     }
 
     /**
