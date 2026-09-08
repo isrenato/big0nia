@@ -212,6 +212,28 @@ vendor/bin/big0nia analyse <path> [<path> ...]
   out-of-memory error, e.g. `php -d memory_limit=1G vendor/bin/big0nia
   analyse src/`.
 
+## Configuration
+
+`big0nia` looks for a `big0nia.neon` file in the current working directory.
+If none is found, every path passed on the command line is analysed in
+full.
+
+```neon
+ignore_paths:
+    - vendor
+    - src/Legacy
+```
+
+- `ignore_paths`: a list of strings. Any file whose path contains one of
+  these strings anywhere (a plain substring match, not a glob) is excluded
+  from analysis entirely — it's never even parsed, so a syntax error inside
+  an excluded path is silently skipped rather than reported.
+- A missing config file, or one with no `ignore_paths` key, excludes
+  nothing.
+- A malformed config file, or an `ignore_paths` value that isn't a list of
+  strings, is a fatal error: nothing is analysed, and the problem is
+  reported on stderr.
+
 ## Status
 
 v0 ships the nested-loop-join detector for `foreach` (`NestedLoopJoinRule`)
@@ -219,9 +241,11 @@ and canonical indexed `for` loops (`NestedForLoopJoinRule`), including
 interprocedural detection when the inner loop lives across a method/function
 call boundary (`InterproceduralLoopJoinRule`), the self-referential
 `array_merge()`-in-a-loop detector (`ArrayMergeInLoopRule`), and the
-loop-invariant repeated-sort detector (`RepeatedSortInLoopRule`). Cross-call
-detection for `while` loops and more performance-anti-pattern rules (Doctrine
-N+1) are planned.
+loop-invariant repeated-sort detector (`RepeatedSortInLoopRule`). A
+`big0nia.neon` config file supports one key so far, `ignore_paths` (see
+Configuration above), to exclude vendor code or legacy modules from
+analysis entirely. Cross-call detection for `while` loops and more
+performance-anti-pattern rules (Doctrine N+1) are planned.
 
 ## License
 
