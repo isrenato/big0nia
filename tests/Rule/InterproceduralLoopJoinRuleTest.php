@@ -629,6 +629,116 @@ final class InterproceduralLoopJoinRuleTest extends TestCase
         self::assertStringContainsString('via UserService::matchAgainstOrders() → OrderMatcher::matchAll()', $finding->message);
     }
 
+    public function testSuppressesWhenOuterLoopUnconditionallyBreaksAfterOnePass(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/UserService.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class UserService {
+                    public function __construct(private OrderMatcher $matcher) {}
+                    public function process(array $users): void {
+                        foreach ($users as $user) {
+                            $this->matcher->matchAll($user);
+                            break;
+                        }
+                    }
+                }
+                PHP,
+            '/virtual/OrderMatcher.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class OrderMatcher {
+                    public function matchAll($user): void {
+                        foreach ($this->orders as $order) {
+                            if ($user->getId() === $order->getUserId()) {
+                                // match
+                            }
+                        }
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $outer = $this->findFirstForeach($index, 'App\\UserService', 'process');
+
+        self::assertNull($rule->check($outer, []));
+    }
+
+    public function testSuppressesWhenTheInnerLoopUnconditionallyReturnsAfterOnePass(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/UserService.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class UserService {
+                    public function __construct(private OrderMatcher $matcher) {}
+                    public function process(array $users): void {
+                        foreach ($users as $user) {
+                            $this->matcher->matchAll($user);
+                        }
+                    }
+                }
+                PHP,
+            '/virtual/OrderMatcher.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class OrderMatcher {
+                    public function matchAll($user): void {
+                        foreach ($this->orders as $order) {
+                            if ($user->getId() === $order->getUserId()) {
+                                // match
+                            }
+                            return;
+                        }
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $outer = $this->findFirstForeach($index, 'App\\UserService', 'process');
+
+        self::assertNull($rule->check($outer, []));
+    }
+
+    public function testConditionalBreakInTheInnerLoopStillReportsFinding(): void
+    {
+        $index = $this->buildIndex([
+            '/virtual/UserService.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class UserService {
+                    public function __construct(private OrderMatcher $matcher) {}
+                    public function process(array $users): void {
+                        foreach ($users as $user) {
+                            $this->matcher->matchAll($user);
+                        }
+                    }
+                }
+                PHP,
+            '/virtual/OrderMatcher.php' => <<<'PHP'
+                <?php
+                namespace App;
+                class OrderMatcher {
+                    public function matchAll($user): void {
+                        foreach ($this->orders as $order) {
+                            if ($user->getId() === $order->getUserId()) {
+                                break;
+                            }
+                        }
+                    }
+                }
+                PHP,
+        ]);
+
+        $rule = new InterproceduralLoopJoinRule($index);
+        $outer = $this->findFirstForeach($index, 'App\\UserService', 'process');
+
+        self::assertNotNull($rule->check($outer, []));
+    }
+
     private function findFirstForeach(ProjectIndex $index, string $classFqcn, string $methodName): Foreach_
     {
         $class = $index->findClass($classFqcn);
