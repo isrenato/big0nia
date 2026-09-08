@@ -11,9 +11,9 @@ by rebuilding the same array on every iteration, and sorts that
 redundantly re-sort data nothing in the loop ever changes.
 
 Complexity/performance analysis is a different lane from what
-general-purpose static analyzers like PHPStan or Psalm check — they focus
+general-purpose static analyzers - they focus
 on type safety, bug patterns, and code smells, not asymptotic complexity.
-big0nia is meant to run alongside them, not replace them.
+big0nia is meant to run alongside them.
 
 ## The problem it finds
 
