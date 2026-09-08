@@ -200,8 +200,8 @@ vendor/bin/big0nia analyse <path> [<path> ...]
 - Accepts any mix of files and directories; directories are scanned
   recursively for `.php` files.
 - Exit code `0`: every given path was analysed and no issues were found.
-- Exit code `1`: a finding was reported, a given path doesn't exist, or a
-  file couldn't be parsed or read.
+- Exit code `1`: a finding was reported, a given path doesn't exist, a
+  file couldn't be parsed or read, or the config file is invalid.
 - A path that doesn't exist prints `Path not found: <path>` to stderr and
   the rest of the run continues.
 - A file that fails to parse or can't be read prints

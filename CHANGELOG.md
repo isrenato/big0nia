@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A `big0nia.neon` config file (auto-discovered in the current working
+  directory) supports one key, `ignore_paths`: a list of strings, each
+  matched as a substring against every analysed file's path. A matching
+  file is excluded from analysis entirely, before it's even parsed — a
+  syntax error inside an excluded path is silently skipped rather than
+  reported. A missing config file, or one with no `ignore_paths` key,
+  excludes nothing. A malformed config file, or an `ignore_paths` value
+  that isn't a list of non-empty strings, is a fatal error: nothing is
+  analysed.
+
 ## [0.6.0] - 2026-08-27
 
 ### Added

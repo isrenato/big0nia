@@ -65,6 +65,13 @@ final class ConfigLoader
                     get_debug_type($entry)
                 ));
             }
+
+            if ($entry === '') {
+                throw new ConfigException(sprintf(
+                    'Config key "ignore_paths" in %s must not contain empty strings.',
+                    $path
+                ));
+            }
         }
 
         return $ignorePaths;

@@ -102,6 +102,16 @@ final class ConfigLoaderTest extends TestCase
         (new ConfigLoader())->load($this->tempDir);
     }
 
+    public function testThrowsWhenIgnorePathsContainsAnEmptyString(): void
+    {
+        $this->writeConfig("ignore_paths:\n    - \"\"\n");
+
+        $this->expectException(ConfigException::class);
+        $this->expectExceptionMessage('must not contain empty strings');
+
+        (new ConfigLoader())->load($this->tempDir);
+    }
+
     public function testThrowsWhenConfigFileDoesNotDecodeToAMap(): void
     {
         $this->writeConfig("hello\n");
