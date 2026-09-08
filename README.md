@@ -241,8 +241,8 @@ vendor/bin/big0nia analyse <path> [<path> ...]
 - Accepts any mix of files and directories; directories are scanned
   recursively for `.php` files.
 - Exit code `0`: every given path was analysed and no issues were found.
-- Exit code `1`: a finding was reported, a given path doesn't exist, or a
-  file couldn't be parsed or read.
+- Exit code `1`: a finding was reported, a given path doesn't exist, a
+  file couldn't be parsed or read, or the config file is invalid.
 - A path that doesn't exist prints `Path not found: <path>` to stderr and
   the rest of the run continues.
 - A file that fails to parse or can't be read prints
@@ -252,6 +252,28 @@ vendor/bin/big0nia analyse <path> [<path> ...]
   large codebases, pass a higher memory limit to PHP if you hit an
   out-of-memory error, e.g. `php -d memory_limit=1G vendor/bin/big0nia
   analyse src/`.
+
+## Configuration
+
+`big0nia` looks for a `big0nia.neon` file in the current working directory.
+If none is found, every path passed on the command line is analysed in
+full.
+
+```neon
+ignore_paths:
+    - vendor
+    - src/Legacy
+```
+
+- `ignore_paths`: a list of strings. Any file whose path contains one of
+  these strings anywhere (a plain substring match, not a glob) is excluded
+  from analysis entirely — it's never even parsed, so a syntax error inside
+  an excluded path is silently skipped rather than reported.
+- A missing config file, or one with no `ignore_paths` key, excludes
+  nothing.
+- A malformed config file, or an `ignore_paths` value that isn't a list of
+  strings, is a fatal error: nothing is analysed, and the problem is
+  reported on stderr.
 
 ## Status
 

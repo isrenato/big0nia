@@ -6,6 +6,8 @@ namespace Doloto\Big0nia\Console;
 
 use Doloto\Big0nia\Analysis\FileAnalyser;
 use Doloto\Big0nia\Analysis\PhpFileParser;
+use Doloto\Big0nia\Config\ConfigException;
+use Doloto\Big0nia\Config\ConfigLoader;
 use Doloto\Big0nia\Project\ProjectIndexBuilder;
 use Doloto\Big0nia\Rule\ArrayMergeInLoopRule;
 use Doloto\Big0nia\Rule\InterproceduralLoopJoinRule;
@@ -36,6 +38,26 @@ final class AnalyseCommand
         $paths = array_slice($args, 1);
         $hasMissingPath = false;
         $files = $this->collectPhpFiles($paths, $hasMissingPath);
+
+        $cwd = getcwd();
+        if ($cwd === false) {
+            fwrite(STDERR, "Could not determine current working directory.\n");
+
+            return 1;
+        }
+
+        try {
+            $config = (new ConfigLoader())->load($cwd);
+        } catch (ConfigException $e) {
+            fwrite(STDERR, $e->getMessage() . "\n");
+
+            return 1;
+        }
+
+        $files = array_values(array_filter(
+            $files,
+            fn (string $file): bool => !$this->isIgnored($file, $config->ignorePaths)
+        ));
 
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
         $fileParser = new PhpFileParser($parser);
@@ -121,5 +143,19 @@ final class AnalyseCommand
         }
 
         return $files;
+    }
+
+    /**
+     * @param string[] $ignorePaths
+     */
+    private function isIgnored(string $file, array $ignorePaths): bool
+    {
+        foreach ($ignorePaths as $ignorePath) {
+            if (str_contains($file, $ignorePath)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
