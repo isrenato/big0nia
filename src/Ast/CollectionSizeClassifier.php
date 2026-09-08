@@ -16,8 +16,6 @@ use PhpParser\Node\Stmt\Expression;
 
 final class CollectionSizeClassifier
 {
-    private const MAX_FIXED_SIZE = 5;
-
     private ClassMemberResolver $memberResolver;
 
     public function __construct()
@@ -65,11 +63,7 @@ final class CollectionSizeClassifier
 
     private function classifyBySize(Array_ $array): CollectionSize
     {
-        if (count($array->items) === 0) {
-            return CollectionSize::Unknown;
-        }
-
-        return count($array->items) <= self::MAX_FIXED_SIZE ? CollectionSize::FixedSmall : CollectionSize::Unbounded;
+        return count($array->items) === 0 ? CollectionSize::Unknown : CollectionSize::FixedSmall;
     }
 
     /**

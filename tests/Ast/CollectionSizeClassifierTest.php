@@ -31,7 +31,7 @@ final class CollectionSizeClassifierTest extends TestCase
         $big = new Array_(array_fill(0, 6, new ArrayItem(new Variable('x'))));
 
         self::assertSame(CollectionSize::FixedSmall, $classifier->classify($small, []));
-        self::assertSame(CollectionSize::Unbounded, $classifier->classify($big, []));
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify($big, []));
     }
 
     public function testClassifiesVariableViaPrecedingLiteralAssignment(): void
@@ -65,11 +65,11 @@ final class CollectionSizeClassifierTest extends TestCase
             new Expression(new Assign(new Variable('statuses'), new Array_([new ArrayItem(new Variable('a'))]))),
             new Expression(new Assign(
                 new Variable('statuses'),
-                new Array_(array_fill(0, 6, new ArrayItem(new Variable('x'))))
+                new Array_(array_fill(0, 8, new ArrayItem(new Variable('x'))))
             )),
         ];
 
-        self::assertSame(CollectionSize::Unbounded, $classifier->classify(new Variable('statuses'), $stmts));
+        self::assertSame(CollectionSize::FixedSmall, $classifier->classify(new Variable('statuses'), $stmts));
     }
 
     public function testEmptyArrayLiteralClassifiesAsUnknownNotFixedSmall(): void
