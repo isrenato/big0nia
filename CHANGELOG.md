@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-09
+
+### Fixed
+
+- README: two mentions of the old ≤5-item suppression threshold were
+  stale after 1.0.0 removed that cap — updated to describe the actual
+  fixed-size classification (array literal of any size, class constant,
+  or literal-bound `range()`).
+- `composer.json` no longer declares a `version` field. Packagist derives
+  the canonical version from git tags for VCS-hosted packages; keeping a
+  manually-maintained field in sync with tags is exactly what caused an
+  upstream re-tag to get blocked as a mismatch.
+
+### Added
+
+- README: badges (CI, Packagist version, license, PHP version), a
+  one-line pitch, a "Quick Start" section, and a "Contributing" section
+  listing the exact commands CI runs.
+
 ## [1.0.0] - 2026-09-09
 
 ### Added
