@@ -1,5 +1,13 @@
 # big0nia
 
+[![CI](https://github.com/isrenato/big0nia/actions/workflows/ci.yml/badge.svg)](https://github.com/isrenato/big0nia/actions/workflows/ci.yml)
+[![Packagist Version](https://img.shields.io/packagist/v/doloto/big0nia)](https://packagist.org/packages/doloto/big0nia)
+[![License](https://img.shields.io/packagist/l/doloto/big0nia)](LICENSE)
+[![PHP Version](https://img.shields.io/packagist/php-v/doloto/big0nia)](https://packagist.org/packages/doloto/big0nia)
+
+**Catches algorithmic-complexity and performance anti-patterns that
+PHPStan and Psalm don't check for.**
+
 A standalone static analysis tool for PHP and Symfony that automatically
 detects algorithmic-complexity (Big-O) issues and performance
 anti-patterns before they hit production: nested `foreach`/`for` loops
@@ -10,10 +18,20 @@ a linear scan, `array_merge()` calls that silently turn a loop into O(n²)
 by rebuilding the same array on every iteration, and sorts that
 redundantly re-sort data nothing in the loop ever changes.
 
-Complexity/performance analysis is a different lane from what
-general-purpose static analyzers like PHPStan or Psalm check — they focus
-on type safety, bug patterns, and code smells, not asymptotic complexity.
-big0nia is meant to run alongside them, not replace them.
+big0nia is meant to run alongside PHPStan/Psalm, not replace them: they
+focus on type safety, bug patterns, and code smells, not algorithmic
+complexity.
+
+## Quick Start
+
+```bash
+composer require --dev doloto/big0nia
+vendor/bin/big0nia analyse src/
+```
+
+That's it — no configuration file is required. See
+[CLI reference](#cli-reference) for exit codes and options, or
+[Configuration](#configuration) to exclude paths from analysis.
 
 ## The problem it finds
 
@@ -156,10 +174,12 @@ decrementing, is not recognized), `big0nia`:
    default array literal, or to a method body that is exactly one
    `return <array literal>;`. A property's default is only trusted if
    the property is never reassigned anywhere else in the class.
-4. **Suppresses only when provably small** — a finding is suppressed
-   only when one of the two collections classifies as a small fixed-size
-   array literal (5 items or fewer). Everything else, including a
-   collection it can't classify at all, is reported.
+4. **Suppresses only when provably fixed-size** — a finding is
+   suppressed only when one of the two collections classifies as
+   fixed-size: an array literal of any size (the property that matters
+   is independence from input size, not smallness), a `self::`/`static::`
+   class constant array, or a literal-bound `range()` call. Everything
+   else, including a collection it can't classify at all, is reported.
 
 ## Interprocedural nested-loop joins
 
@@ -224,13 +244,7 @@ loop. Scope is `foreach` loops and canonical indexed `for` loops only — the
 same narrow set the intra-procedural detector already documents — and `while`
 loops are not yet supported for cross-call detection. Suppressions apply: a
 finding is reported only when both the outer and inner collections are not
-provably small (5 items or fewer by array literal or default value).
-
-## Install
-
-```bash
-composer require --dev doloto/big0nia
-```
+provably fixed-size (see "Suppresses only when provably fixed-size" above).
 
 ## CLI reference
 
@@ -277,7 +291,7 @@ ignore_paths:
 
 ## Status
 
-v0 ships the nested-loop-join detector for `foreach` (`NestedLoopJoinRule`)
+big0nia ships the nested-loop-join detector for `foreach` (`NestedLoopJoinRule`)
 and canonical indexed `for` loops (`NestedForLoopJoinRule`), including
 interprocedural detection when the inner loop lives across a method/function
 call boundary (`InterproceduralLoopJoinRule`), the self-referential
@@ -292,6 +306,20 @@ every rule above. A `big0nia.neon` config file supports one key so far,
 `ignore_paths` (see Configuration above), to exclude vendor code or legacy
 modules from analysis entirely. Cross-call detection for `while` loops and
 more performance-anti-pattern rules (Doctrine N+1) are planned.
+
+## Contributing
+
+Before opening a PR, run the same checks CI runs:
+
+```bash
+composer install --prefer-dist --no-progress
+vendor/bin/phpunit
+vendor/bin/phpstan analyse --no-progress
+vendor/bin/php-cs-fixer fix --dry-run --diff
+```
+
+CI runs this matrix against PHP 8.2 and 8.3 on every push to `main` and
+every pull request (see `.github/workflows/ci.yml`).
 
 ## License
 
